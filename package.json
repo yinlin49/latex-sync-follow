@@ -1,0 +1,97 @@
+{
+    "name": "latex-sync-follow",
+    "displayName": "LaTeX Live Preview & SyncTeX Follow",
+    "description": "Live LaTeX preview tab (rendered while you type, no PDF build) with two-way source sync, on-demand PDF export, and SyncTeX cursor follow for LaTeX Workshop.",
+    "version": "0.1.0",
+    "publisher": "local",
+    "license": "MIT",
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "onLanguage:latex",
+        "onLanguage:latex-expl3",
+        "onLanguage:doctex",
+        "onWebviewPanel:latexLivePreview"
+    ],
+    "extensionDependencies": [
+        "james-yu.latex-workshop"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "latexSyncFollow.toggle",
+                "title": "Toggle Cursor → PDF Follow",
+                "category": "LaTeX SyncTeX Follow"
+            },
+            {
+                "command": "latexLivePreview.open",
+                "title": "Open Live Preview",
+                "category": "LaTeX",
+                "icon": "$(open-preview)"
+            },
+            {
+                "command": "latexLivePreview.exportPdf",
+                "title": "Export PDF",
+                "category": "LaTeX",
+                "icon": "$(file-pdf)"
+            },
+            {
+                "command": "latexLivePreview.showStats",
+                "title": "Show Live Preview Latency Stats",
+                "category": "LaTeX"
+            }
+        ],
+        "configuration": {
+            "title": "LaTeX SyncTeX Follow",
+            "properties": {
+                "latexSyncFollow.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Scroll the LaTeX Workshop PDF tab to the cursor line (SyncTeX forward search) whenever the cursor moves."
+                }
+            }
+        },
+        "menus": {
+            "editor/title": [
+                {
+                    "command": "latexLivePreview.open",
+                    "when": "editorLangId == latex",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "latexLivePreview.exportPdf",
+                    "when": "editorLangId == latex || activeWebviewPanelId == 'latexLivePreview'",
+                    "group": "navigation@2"
+                }
+            ]
+        }
+    },
+    "scripts": {
+        "build": "node build.mjs",
+        "vscode:prepublish": "node build.mjs",
+        "test": "node --test test/unit.test.js test/preview.test.mjs",
+        "e2e": "node test/e2e.js",
+        "e2e:preview": "node test/e2e-preview.js",
+        "package": "npx --yes @vscode/vsce package --allow-missing-repository --skip-license"
+    },
+    "devDependencies": {
+        "esbuild": "^0.28.2",
+        "playwright-core": "^1.50.0"
+    },
+    "dependencies": {
+        "@unified-latex/unified-latex-to-hast": "^1.8.4",
+        "@unified-latex/unified-latex-util-arguments": "^1.8.4",
+        "@unified-latex/unified-latex-util-html-like": "^1.8.4",
+        "@unified-latex/unified-latex-util-macros": "^1.8.4",
+        "@unified-latex/unified-latex-util-parse": "^1.8.4",
+        "@unified-latex/unified-latex-util-print-raw": "^1.8.4",
+        "hast-util-to-html": "^9.0.6",
+        "katex": "^0.19.1",
+        "unified": "^10.1.2"
+    }
+}

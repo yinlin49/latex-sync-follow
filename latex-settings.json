@@ -1,0 +1,13 @@
+{
+    "latex-workshop.latex.autoBuild.run": "never",
+    "latex-workshop.latex.autoBuild.interval": 300,
+    "latex-workshop.latex.autoBuild.cleanAndRetry.enabled": false,
+    "latex-workshop.latex.recipe.default": "lastUsed",
+    "latex-workshop.view.pdf.viewer": "tab",
+    "latex-workshop.view.pdf.tab.editorGroup": "right",
+    "latex-workshop.view.pdf.internal.synctex.keybinding": "double-click",
+    "latex-workshop.synctex.indicator": "rectangle",
+    "latex-workshop.message.error.show": false,
+    "latex-workshop.message.warning.show": false,
+    "latexSyncFollow.enabled": true
+}

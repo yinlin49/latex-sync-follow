@@ -1,0 +1,6 @@
+node_modules/
+# build output: npm run build
+dist/
+media/katex/
+*.vsix
+*.tmp*
