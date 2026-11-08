@@ -2,7 +2,7 @@
     "name": "latex-sync-follow",
     "displayName": "LaTeX Live Preview",
     "description": "Live LaTeX preview tab rendered while you type (no PDF build), with word-accurate source <-> preview navigation and on-demand PDF export through LaTeX Workshop.",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "publisher": "local",
     "license": "MIT",
     "repository": {
