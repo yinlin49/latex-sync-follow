@@ -99,6 +99,6 @@
         "@unified-latex/unified-latex-util-print-raw": "^1.8.4",
         "hast-util-to-html": "^9.0.6",
         "katex": "^0.19.1",
-        "unified": "^10.1.2"
+        "unified": "^11.0.5"
     }
 }
