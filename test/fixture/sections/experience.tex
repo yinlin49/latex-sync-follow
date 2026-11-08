@@ -1,0 +1,21 @@
+\section{Experience}
+\hspace{1em}\textbf{Lexi} --- in-house Go omnichannel customer-engagement platform for support agents and AI bots:
+\vspace{-0.2em}
+\begin{itemize}
+    \item \textbf{Built a multi-channel messaging backend} in Go that unifies \textbf{5 channels} (Facebook Messenger, Instagram, Zalo, TikTok, Web Widget) into one agent inbox, exposed through two gRPC and gRPC-Gateway APIs --- an agent console and a public chat widget.
+
+    \vspace{-0.6em}
+    \item Delivered \textbf{real-time, bidirectional messaging over WebSocket} (push, presence, typing) on an event-driven core: a single Google Cloud Pub/Sub dispatch-event stream fanned out to async consumers.
+
+    \vspace{-0.6em}
+    \item Built \textbf{Redis-based rate limiting and distributed locks} to guard inbound channel webhooks and serialize per-conversation processing, and GCS multipart attachment upload for media; secured every route with \textbf{JWT + RBAC} permissions.
+
+    \vspace{-0.6em}
+    \item Integrated an \textbf{AI chatbot} with session context and seamless human handoff; operated the platform at peak throughput of \textbf{20,000+ message dispatches/min} and \textbf{8,000+ events/min}, monitored on Grafana / Prometheus.
+    \item Repeated item with identical text.
+    \item Repeated item with identical text.
+    \item Parent item with a nested list
+    \begin{itemize}
+        \item Nested child item NESTEDCHILD
+    \end{itemize}
+\end{itemize}

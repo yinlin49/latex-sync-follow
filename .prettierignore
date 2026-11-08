@@ -4,3 +4,4 @@ media/katex/
 package-lock.json
 *.vsix
 .vscode-test/
+.gitnexus/

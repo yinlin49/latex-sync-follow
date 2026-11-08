@@ -5,9 +5,6 @@
     "latex-workshop.latex.recipe.default": "lastUsed",
     "latex-workshop.view.pdf.viewer": "tab",
     "latex-workshop.view.pdf.tab.editorGroup": "right",
-    "latex-workshop.view.pdf.internal.synctex.keybinding": "double-click",
-    "latex-workshop.synctex.indicator": "rectangle",
     "latex-workshop.message.error.show": false,
-    "latex-workshop.message.warning.show": false,
-    "latexSyncFollow.enabled": true
+    "latex-workshop.message.warning.show": false
 }

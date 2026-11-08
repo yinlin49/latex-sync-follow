@@ -1,4 +1,4 @@
-# LaTeX Live Preview & SyncTeX Follow
+# LaTeX Live Preview
 
 [![CI](https://github.com/yinlin49/latex-sync-follow/actions/workflows/ci.yml/badge.svg)](https://github.com/yinlin49/latex-sync-follow/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/yinlin49/latex-sync-follow?include_prereleases&sort=semver)](https://github.com/yinlin49/latex-sync-follow/releases)
@@ -6,9 +6,8 @@
 A VS Code companion to [LaTeX Workshop](https://github.com/James-Yu/LaTeX-Workshop) (tested with 10.20.0):
 
 - **Live Preview tab**: the document is rendered while you type, without building a PDF. A typical edit shows up in about 10 ms. The page is laid out like the PDF: paper size, margins and font size come from the document, and definitions in project-local `.cls`/`.sty` files are applied.
-- **Two-way sync**: moving the cursor in a `.tex` file scrolls the preview and highlights that line. Clicking in the preview jumps to the source file and line.
+- **Two-way navigation**: moving the cursor in a `.tex` file scrolls the preview and highlights what that source line renders (one `\item`, not the whole list). Clicking or double-clicking a word in the preview jumps to its file, line and column and selects it.
 - **Export PDF**: a real LaTeX build (latexmk through LaTeX Workshop), run only when you click the button.
-- **SyncTeX follow** for the exported PDF tab, with stale-PDF detection.
 
 ## Install
 
@@ -30,10 +29,10 @@ Recommended settings, with no background PDF builds and the PDF opened in a tab,
 
 1. Open the project folder and a `.tex` file. Click **Open Live Preview** (editor title bar) or run `LaTeX: Open Live Preview`.
 2. Type: the preview follows. No saving is needed.
-3. Click or arrow to a line: the preview scrolls there and highlights it. Click text, a formula or an image in the preview: the editor jumps to that line.
+3. Click or arrow to a line: the preview scrolls there and highlights it. Click or double-click a word, a formula or an image in the preview: the editor jumps to it (the word is selected, the line flashes).
 4. **Export PDF** (preview toolbar or editor title bar) runs LaTeX Workshop's build. Progress and errors appear as usual (Problems panel). Afterwards you can choose **Open PDF**, **Save As…** or **Reveal in Explorer**. The engine is the last recipe used in **LaTeX Workshop: Build with recipe** (`latexmk` for pdflatex, `latexmk (xelatex)` or `latexmk (lualatex)`).
 5. Zoom: **Fit** (page width, the default), `−`/`+`, or Ctrl+mouse wheel.
-6. `LaTeX: Show Live Preview Latency Stats` prints p50/p95/p99 typing-to-paint latency to the `LaTeX SyncTeX Follow` output channel.
+6. `LaTeX: Show Live Preview Latency Stats` prints p50/p95/p99 typing-to-paint latency to the `LaTeX Live Preview` output channel.
 
 ## Why a preview instead of a live PDF
 
@@ -45,6 +44,7 @@ Measured with MiKTeX 26.5: one `pdflatex` pass takes 450–500 ms, even for a on
 - **Incremental**: each file is split at blank lines (a blank line ends a TeX paragraph). A chunk that leaves an environment, group or math open is merged with the following ones until it closes. Each chunk is parsed once per distinct text.
 - **Block cache**: a block's HTML is cached under its text plus only the numbers it depends on (its counters, the labels it references, its citations, its images, and the macro definitions). Editing one paragraph re-parses and re-renders that paragraph only. Inserting an equation re-renders only the blocks whose numbers change.
 - **Webview updates**: the webview receives HTML only for blocks it does not have yet. It replaces just those DOM nodes, so scroll position and zoom are kept. Off-screen blocks skip layout (`content-visibility`).
+- **Source mapping**: before every rendered token (a word with its punctuation, a command, a formula, the text of each `\item`, the inside of `\textbf{...}`, titles and captions) the renderer places an empty anchor that carries the token's source line and column, taken from the parser's positions. A click finds the anchor just before the caret (DOM Range API) and adds the characters from the anchor to the caret, which gives the exact source column. Wrapped preview lines do not matter: positions come from the source, not the layout. Keys, paths and lengths (`\label`, `\includegraphics`, `\href` URLs, `\vspace`) get no anchors.
 - **Scheduling**: renders start on the next tick after an edit. Only one update is in flight: edits made while the webview is busy collapse into one newest update, and an older render never overwrites a newer one.
 - **Supported**:
     - sections (numbered), `\input`/`\include`;
@@ -61,8 +61,7 @@ Measured with MiKTeX 26.5: one `pdflatex` pass takes 450–500 ms, even for a on
 - **Not rendered**: macros that need TeX internals (for example `\lipsum`, or `\@`-commands of a class) are flagged, not executed.
 - **Citations** are numbered in order of first citation (like `unsrt`), not sorted (like `plain`).
 - **Images**: PDF/EPS graphics show as a placeholder (they appear in the exported PDF).
-- **Mapping granularity**: one source line. Within a line, clicks map to the line, not to a column.
-- **SyncTeX follow** only works for latexmk recipes (it reads `.fdb_latexmk`).
+- **Mapping granularity**: a source column inside a token. Inside a formula or an image, a click maps to where the formula or the image starts. Text that a macro definition produces (`\newcommand` bodies, class headers) maps to where the macro is used, or to the block start.
 
 ## Build and test from source
 
@@ -77,26 +76,27 @@ npm run package        # latex-sync-follow-<version>.vsix
 npm run verify:vsix -- latex-sync-follow-<version>.vsix --version <version>
 ```
 
-The end-to-end suites drive a real VS Code with Playwright and need a TeX distribution:
+`npm run e2e` drives a real VS Code with Playwright and needs a TeX distribution. It checks:
 
-- `npm run e2e:preview`: Live Preview checks.
-    - typing latency;
-    - edits and transient syntax errors;
-    - source ↔ preview sync at several zoom levels;
-    - a 2,100-line document;
-    - memory over repeated typing;
-    - Export PDF compared with the preview.
-- `npm run e2e`: PDF and SyncTeX checks (auto-build, forward and inverse search, errors, xelatex, restart).
+- typing latency;
+- edits and transient syntax errors;
+- source ↔ preview navigation: double-clicks on words in every `\item`, inside and outside `\textbf`, in nested lists and in identical items, at several zoom levels, checking the line, column and selected word;
+- a 2,100-line document;
+- memory over repeated typing;
+- Export PDF compared with the preview.
+
+Options:
+
 - `E2E_VSIX=latex-sync-follow-<version>.vsix` tests the installed package instead of the source tree.
-- `E2E_ONLY=testExport,...` runs some steps only.
-- Without a local VS Code install, the suites download one. On Linux, run them under `xvfb-run`.
+- `E2E_ONLY=testItemMapping,...` runs some steps only.
+- Without a local VS Code install, the suite downloads one. On Linux, run it under `xvfb-run`.
 
 ## CI and releases
 
 - **[CI](.github/workflows/ci.yml)** runs on pushes to `main`, on pull requests, and on demand.
     - Lint, formatting, type check, unit tests, build, package and package verification run on Linux, Windows and macOS.
     - Runtime dependencies are audited.
-    - Both end-to-end suites run on Linux against the packaged `.vsix`.
+    - The end-to-end suite runs on Linux against the packaged `.vsix`.
 - **[Release](.github/workflows/release.yml)** runs when a `vX.Y.Z` tag is pushed.
     1. It checks that the tag matches `package.json`.
     2. It runs the whole CI.

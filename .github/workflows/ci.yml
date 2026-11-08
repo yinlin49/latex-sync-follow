@@ -106,16 +106,10 @@ jobs:
               run: |
                   sudo apt-get update
                   sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base texlive-latex-recommended \
-                    texlive-latex-extra texlive-xetex texlive-fonts-recommended poppler-utils xvfb
+                    texlive-latex-extra texlive-fonts-recommended poppler-utils xvfb
             - name: Live Preview suite
               env:
                   E2E_DIR: ${{ runner.temp }}/e2e-preview
-              run: |
-                  export E2E_VSIX=$(ls package/latex-sync-follow-*.vsix)
-                  xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run e2e:preview
-            - name: PDF and SyncTeX suite
-              env:
-                  E2E_DIR: ${{ runner.temp }}/e2e-synctex
               run: |
                   export E2E_VSIX=$(ls package/latex-sync-follow-*.vsix)
                   xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run e2e

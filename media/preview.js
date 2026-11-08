@@ -1,6 +1,7 @@
 // Live preview webview: keyed block reconciliation (only changed blocks touch the DOM), source<->preview sync.
 ;(function () {
     const vscode = acquireVsCodeApi()
+    const DRAG_PX = 4 // pointer movement between mousedown and click that makes it a text selection
     const doc = document.getElementById('doc')
     const zoomLabel = document.getElementById('zoom')
     const state = vscode.getState() ?? { zoom: 'fit' }
@@ -106,28 +107,62 @@
         return [...doc.children].filter(b => Number(b.dataset.file) === fileIndex)
     }
 
-    /** Range from the anchor of `line` (or the closest one above) to the next anchor in the block. */
+    const anchorLine = (block, anchor) => Number(block.dataset.line) + Number(anchor.dataset.rl)
+
+    /**
+     * The rendered content of source `line`: from its first anchor to the next anchor of another line.
+     * A line with nothing visible (\vspace, \label, \begin{itemize}) maps to the next line that has content.
+     */
     function lineRange(block, line) {
         const anchors = [...block.querySelectorAll('.lp-a')]
-        const start = Number(block.dataset.line)
-        let index = -1
-        anchors.forEach((a, i) => {
-            if (start + Number(a.dataset.rl) <= line) index = i
-        })
         const range = document.createRange()
-        if (index < 0) {
-            range.selectNodeContents(block)
-            return range
+        let first = anchors.findIndex(a => anchorLine(block, a) === line)
+        if (first < 0) first = anchors.findIndex(a => anchorLine(block, a) > line)
+        while (first >= 0) {
+            const target = anchorLine(block, anchors[first])
+            const next = anchors.findIndex((a, i) => i > first && anchorLine(block, a) !== target)
+            range.setStartBefore(anchors[first])
+            if (next < 0) range.setEnd(block, block.childNodes.length)
+            else range.setEndBefore(anchors[next])
+            if (range.toString().trim() !== '' || next < 0) return range
+            first = next
         }
-        range.setStartAfter(anchors[index])
-        // a line with nothing visible (\centering, \label) highlights the next line that has content
-        let end = index + 1
-        for (; end < anchors.length; end++) {
-            range.setEndBefore(anchors[end])
-            if (range.toString().trim() !== '') return range
-        }
-        range.setEnd(block, block.childNodes.length)
+        range.selectNodeContents(block)
         return range
+    }
+
+    /** The anchor at or before a DOM point (in document order), within `block`. */
+    function anchorBefore(block, node, offset) {
+        if (node.nodeType === Node.ELEMENT_NODE && offset < node.childNodes.length) node = node.childNodes[offset]
+        if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('lp-a')) return node
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_ELEMENT, {
+            acceptNode: n => (n.classList.contains('lp-a') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+        })
+        walker.currentNode = node
+        return walker.previousNode()
+    }
+
+    /**
+     * Source line and column of a click: the anchor before the caret gives the word's position, the
+     * characters between that anchor and the caret the offset inside the word.
+     */
+    function sourcePosition(block, e) {
+        // KaTeX and images have no useful caret position: the element itself marks the spot
+        const atomic = e.target.closest('.lp-math-d, .lp-math-i, img')
+        const caret = atomic ? null : document.caretRangeFromPoint(e.clientX, e.clientY)
+        const node = atomic ?? caret?.startContainer ?? e.target
+        const offset = atomic ? 0 : (caret?.startOffset ?? 0)
+        const anchor = block.contains(node) ? anchorBefore(block, node, offset) : null
+        if (!anchor) return { line: Number(block.dataset.line), column: 0 }
+        let inWord = 0
+        if (!atomic && node.nodeType === Node.TEXT_NODE) {
+            const between = document.createRange()
+            between.setStartAfter(anchor)
+            between.setEnd(node, offset)
+            inWord = between.toString().length
+        }
+        const line = Math.min(anchorLine(block, anchor), Number(block.dataset.endLine))
+        return { line, column: Number(anchor.dataset.c) + inWord }
     }
 
     function highlight(reveal, scroll) {
@@ -156,23 +191,27 @@
         if (retries > 0) requestAnimationFrame(() => centerIfHidden(block, range, retries - 1))
     }
 
+    // A drag selects text; a click or double-click navigates. (The selection left by an earlier
+    // double-click must not block the next click, so the pointer movement decides, not the selection.)
+    let pressedAt = { x: 0, y: 0 }
+    doc.addEventListener('mousedown', e => {
+        pressedAt = { x: e.clientX, y: e.clientY }
+    })
     doc.addEventListener('click', e => {
-        if (!window.getSelection().isCollapsed) return // the user is selecting text, not navigating
+        const moved = Math.hypot(e.clientX - pressedAt.x, e.clientY - pressedAt.y)
         const block = e.target.closest('.lp-block')
-        if (!block) return
-        // KaTeX and images have no useful caret position: the element itself marks the spot
-        const atomic = e.target.closest('.lp-math-d, .lp-math-i, img')
-        const caret = atomic ? null : document.caretRangeFromPoint(e.clientX, e.clientY)
-        const point = atomic ?? caret?.startContainer ?? e.target
-        let rl = 0
-        for (const anchor of block.querySelectorAll('.lp-a')) {
-            const before = anchor.compareDocumentPosition(point) & Node.DOCUMENT_POSITION_FOLLOWING
-            if (before || anchor === point) rl = Number(anchor.dataset.rl)
+        if (moved > DRAG_PX || !block) {
+            vscode.postMessage({ type: 'log', message: `click ignored: moved ${moved.toFixed(1)}px, block ${Boolean(block)}` })
+            return
         }
-        const line = Math.min(Number(block.dataset.line) + rl, Number(block.dataset.endLine))
-        lastReveal = { file: files[Number(block.dataset.file)], line }
-        highlight(lastReveal, false)
-        vscode.postMessage({ type: 'goto', file: lastReveal.file, line })
+        try {
+            const { line, column } = sourcePosition(block, e)
+            lastReveal = { file: files[Number(block.dataset.file)], line }
+            highlight(lastReveal, false)
+            vscode.postMessage({ type: 'goto', file: lastReveal.file, line, column })
+        } catch (error) {
+            vscode.postMessage({ type: 'log', message: `click mapping failed: ${error.stack ?? error}` })
+        }
     })
 
     window.addEventListener('message', e => {

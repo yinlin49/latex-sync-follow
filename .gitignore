@@ -7,3 +7,4 @@ media/katex/
 *.sha256
 *.tmp*
 .vscode-test/
+.gitnexus/

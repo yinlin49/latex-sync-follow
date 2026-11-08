@@ -15,3 +15,7 @@ eslint.config.mjs
 .gitignore
 dist/*.map
 dist/*.d.ts
+.claude/**
+.gitnexus/**
+AGENTS.md
+CLAUDE.md

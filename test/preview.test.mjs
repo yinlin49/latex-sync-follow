@@ -14,7 +14,16 @@ function model(files) {
     const m = new LivePreviewModel({ readText: f => texts.get(path.resolve(f)), resolveImage: () => ({ src: 'img.png' }) })
     return { m, set: (name, text) => texts.set(path.resolve('/proj', name), text) }
 }
-const html = result => result.blocks.map(b => b.html).join('\n')
+const rawHtml = result => result.blocks.map(b => b.html).join('\n')
+// structure checks ignore the source anchors placed before every word
+const html = result => rawHtml(result).replace(/<span class="lp-a"[^>]*><\/span>/g, '')
+/** [line, column, following text] of every source anchor, in document order. */
+const anchors = result =>
+    [...rawHtml(result).matchAll(/<span class="lp-a" data-rl="(\d+)" data-c="(\d+)"><\/span>([^<]*)/g)].map(m => [
+        Number(m[1]),
+        Number(m[2]),
+        m[3].trim(),
+    ])
 const text = result =>
     html(result)
         .replace(/<span class="katex-mathml">.*?<\/span>/gs, '')
@@ -118,10 +127,70 @@ test('\\input and \\include splice files in place with their own file and lines'
     assert.strictEqual(r.files.length, 2)
 })
 
-test('each source line gets an anchor carrying its line within the block', () => {
+test('every word carries its source line and column, across lines and inline math', () => {
     const { m } = model({ 'main.tex': doc('Line one\nline two\n$x$ line three') })
-    const anchors = [...html(m.update(ROOT)).matchAll(/data-rl="(\d+)"/g)].map(a => Number(a[1]))
-    assert.deepStrictEqual(anchors, [0, 1, 2])
+    assert.deepStrictEqual(
+        anchors(m.update(ROOT)).filter(a => a[2]),
+        [
+            [0, 0, 'Line'],
+            [0, 5, 'one'],
+            [1, 0, 'line'],
+            [1, 5, 'two'],
+            [2, 4, 'line'],
+            [2, 9, 'three'],
+        ],
+    )
+})
+
+test('each \\item, and the text inside \\textbf, maps to its own line and column', () => {
+    // the bug report: every click in this list mapped to \begin{itemize}
+    const lines = [
+        '\\begin{itemize}',
+        '    \\item \\textbf{Built a multi-channel messaging backend} in Go',
+        '',
+        '    \\vspace{-0.6em}',
+        '    \\item Delivered \\textbf{real-time, bidirectional messaging over WebSocket} (push, presence, typing) on an event-driven core.',
+        '',
+        '    \\vspace{-0.6em}',
+        '    \\item Same text twice.',
+        '    \\item Same text twice.',
+        '    \\item Outer item',
+        '    \\begin{itemize}\\item Nested child\\end{itemize}',
+        '\\end{itemize}',
+    ]
+    const { m } = model({ 'main.tex': doc(lines.join('\n')) })
+    const r = m.update(ROOT)
+    // [line, column] of the anchor before a token (a word with its punctuation)
+    const at = word =>
+        anchors(r)
+            .filter(a => a[2].replace(/[.,;:)]+$/, '') === word)
+            .map(a => a.slice(0, 2))
+    const column = (line, word) => lines[line].indexOf(word)
+    assert.deepStrictEqual(at('over'), [[4, column(4, 'over')]])
+    assert.deepStrictEqual(at('WebSocket'), [[4, column(4, 'WebSocket')]])
+    assert.deepStrictEqual(at('Built'), [[1, column(1, 'Built')]])
+    assert.deepStrictEqual(at('presence'), [[4, column(4, 'presence')]])
+    assert.deepStrictEqual(at('core'), [[4, column(4, 'core.')]])
+    assert.deepStrictEqual(
+        at('Same').map(a => a[0]),
+        [7, 8],
+    )
+    assert.deepStrictEqual(
+        at('Nested').map(a => a[0]),
+        [10],
+    )
+    // each item's words sit inside its own <li>, never only on the list
+    const items = rawHtml(r).split('<li>').slice(1)
+    assert.match(items[0], /data-rl="1"[^]*Built/)
+    assert.match(items[1], /data-rl="4"[^]*Delivered/)
+    assert.doesNotMatch(items[1], /data-rl="1"/)
+})
+
+test('anchors stay out of keys, paths and lengths', () => {
+    const { m } = model({ 'main.tex': doc('\\href{https://example.com/a}{link} \\label{x} \\vspace{1em} \\ref{x}') })
+    const out = rawHtml(m.update(ROOT))
+    assert.match(out, /href="https:\/\/example\.com\/a"/)
+    assert.doesNotMatch(out, /html-tag/)
 })
 
 test('user macros expand; unknown macros and environments are flagged, not dropped', () => {

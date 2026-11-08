@@ -165,7 +165,7 @@ function cpuDelta(before, after) {
 function extensionStats() {
     const logs = path.join(WORK, 'user-data', 'logs')
     const session = fs.readdirSync(logs).sort().pop()
-    const file = path.join(logs, session, 'window1', 'exthost', 'local.latex-sync-follow', 'LaTeX SyncTeX Follow.log')
+    const file = path.join(logs, session, 'window1', 'exthost', 'local.latex-sync-follow', 'LaTeX Live Preview.log')
     const line = fs
         .readFileSync(file, 'utf8')
         .split(/\r?\n/)
@@ -174,32 +174,132 @@ function extensionStats() {
     return JSON.parse(line.slice(line.indexOf('{')))
 }
 
-async function clickPreviewText(frame, marker) {
-    const box = await frame.evaluate(async m => {
-        const walker = document.createTreeWalker(document.getElementById('doc'), NodeFilter.SHOW_TEXT)
-        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-            const at = node.textContent.indexOf(m)
-            if (at < 0) continue
-            const range = document.createRange()
-            range.setStart(node, at)
-            range.setEnd(node, at + m.length)
-            // scroll twice: blocks that were off-screen get their real layout only after a frame
-            for (let i = 0; i < 2; i++) {
-                range.startContainer.parentElement.scrollIntoView({ block: 'center' })
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+/** Clicks (or double-clicks) the middle of the `nth` occurrence of `marker` in the preview. */
+async function clickPreviewText(frame, marker, { nth = 0, double = false } = {}) {
+    const box = await frame.evaluate(
+        async ([m, nth]) => {
+            const walker = document.createTreeWalker(document.getElementById('doc'), NodeFilter.SHOW_TEXT)
+            let seen = 0
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                const at = node.textContent.indexOf(m)
+                if (at < 0 || seen++ < nth) continue
+                const range = document.createRange()
+                range.setStart(node, at)
+                range.setEnd(node, at + m.length)
+                // scroll twice: blocks that were off-screen get their real layout only after a frame
+                for (let i = 0; i < 2; i++) {
+                    range.startContainer.parentElement.scrollIntoView({ block: 'center' })
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+                }
+                const r = range.getBoundingClientRect()
+                return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
             }
-            const r = range.getBoundingClientRect()
-            return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-        }
-        return null
-    }, marker)
+            return null
+        },
+        [marker, nth],
+    )
     if (!box) throw new Error(`${marker} not in preview`)
-    await frame.locator('#doc').click({
-        position: await frame.evaluate(({ x, y }) => {
-            const d = document.getElementById('doc').getBoundingClientRect()
-            return { x: x - d.left, y: y - d.top }
-        }, box),
-    })
+    const position = await frame.evaluate(({ x, y }) => {
+        const d = document.getElementById('doc').getBoundingClientRect()
+        return { x: x - d.left, y: y - d.top }
+    }, box)
+    if (double) await frame.locator('#doc').dblclick({ position })
+    else await frame.locator('#doc').click({ position })
+}
+
+/** Ln, Col and selected-character count shown in the status bar. */
+async function cursorState(win) {
+    const text = await win
+        .locator('[id="status.editor.selection"]')
+        .innerText({ timeout: 1000 })
+        .catch(() => '')
+    const [, line, col, selected] = /Ln (\d+), Col (\d+)(?: \((\d+) selected\))?/.exec(text) ?? []
+    return { line: Number(line), col: Number(col), selected: Number(selected ?? 0) }
+}
+
+async function testItemMapping(win) {
+    await saveAll(win)
+    const frame = await previewFrame(win)
+    const file = 'sections/experience.tex'
+    const lines = fs.readFileSync(path.join(PROJECT, file), 'utf8').split(/\r?\n/)
+    /** 1-based line of the `nth` line containing `marker`, and the column where `word` ends on it */
+    const target = (marker, word, nth = 0) => {
+        const index = lines.map((l, i) => (l.includes(marker) ? i : -1)).filter(i => i >= 0)[nth]
+        return { line: index + 1, end: lines[index].indexOf(word) + word.length + 1 }
+    }
+    const cases = [
+        ['over', '\\item Delivered', 'double-click "over" (item 2)'],
+        ['WebSocket', '\\item Delivered', 'double-click "WebSocket" (item 2, inside \\textbf)'],
+        ['presence', '\\item Delivered', 'double-click "presence" (item 2, after \\textbf)'],
+        ['consumers', '\\item Delivered', 'double-click the last word of a long line'],
+        ['Instagram', '\\item \\textbf{Built a multi', 'double-click item 1'],
+        ['webhooks', '\\item Built \\textbf{Redis', 'double-click item 3'],
+        ['chatbot', '\\item Integrated', 'double-click item 4 (inside \\textbf)'],
+        ['NESTEDCHILD', 'NESTEDCHILD', 'double-click a nested list item'],
+    ]
+    for (const zoom of ['fit', 'zoomed']) {
+        if (zoom === 'zoomed') {
+            await frame.click('#zoom-in')
+            await frame.click('#zoom-in')
+            await frame.evaluate(() => window.scrollBy(0, 157))
+        }
+        for (const [word, marker, name] of cases) {
+            const want = target(marker, word)
+            await clickPreviewText(frame, word, { double: true })
+            const ok = await waitFor(
+                async () => {
+                    const s = await cursorState(win)
+                    return (
+                        (await win.title()).includes('experience.tex') &&
+                        s.line === want.line &&
+                        s.col === want.end &&
+                        s.selected === word.length
+                    )
+                },
+                5000,
+                name,
+            ).then(
+                () => true,
+                () => false,
+            )
+            const got = await cursorState(win)
+            check(
+                `${zoom}: ${name} -> line, word selected`,
+                ok,
+                `Ln ${got.line} Col ${got.col} (${got.selected}) want Ln ${want.line} Col ${want.end}`,
+            )
+        }
+    }
+    await frame.click('#zoom-fit')
+    // identical text: the second occurrence maps to the second line
+    const second = target('Repeated item', 'Repeated', 1)
+    await clickPreviewText(frame, 'Repeated', { nth: 1, double: true })
+    await expectJump(win, file, second.line, 'two identical items: the second maps to its own line')
+
+    // source -> preview: the cursor on item 2 highlights item 2 only
+    await openFile(win, file)
+    for (const [marker, inside, outside] of [
+        ['\\item Delivered', 'consumers', 'Instagram'],
+        ['\\item Built \\textbf{Redis', 'webhooks', 'consumers'],
+    ]) {
+        await clickLine(win, lineOf(file, marker))
+        await sleep(300)
+        const h = await highlightState(frame)
+        check(
+            `source line "${marker}" -> preview highlights that item only`,
+            h.visible && h.text.includes(inside) && !h.text.includes(outside),
+            JSON.stringify(h.text.slice(0, 90)),
+        )
+    }
+    // a line with nothing visible (\vspace before item 3) highlights the next item
+    await clickLine(win, lineOf(file, '\\item Built \\textbf{Redis') - 1)
+    await sleep(300)
+    const h = await highlightState(frame)
+    check(
+        'cursor on the \\vspace line -> next item highlighted',
+        h.text.includes('webhooks') && !h.text.includes('consumers'),
+        JSON.stringify(h.text.slice(0, 60)),
+    )
 }
 
 async function expectJump(win, relFile, line, name) {
@@ -597,6 +697,7 @@ async function main() {
             testEdits,
             testSourceToPreview,
             testPreviewToSource,
+            testItemMapping,
             testLongDocument,
             testMemory,
             testExport,

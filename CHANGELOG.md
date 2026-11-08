@@ -4,6 +4,14 @@ All notable changes to this extension. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Fixed
+
+- Clicking text in the preview mapped every `\item` of a list (and text inside `\textbf`, `\emph`, section titles and captions) to the line where the list or block starts. Every word now carries its source line and column: a click jumps to that line, selects the clicked word, and briefly highlights the line. A cursor on a source line highlights exactly that line's content in the preview (one `\item`, not the whole list).
+
+### Removed
+
+- PDF interaction: the SyncTeX cursor-to-PDF follow, its status bar item, the `Toggle Cursor → PDF Follow` command and the `latexSyncFollow.enabled` setting. Navigation is now between the `.tex` editor and the Live Preview. Export PDF is unchanged.
+
 ## [0.1.0] - 2026-11-08
 
 ### Added

@@ -16,6 +16,8 @@ const MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024
 const MAX_SAMPLES = 5000
 const ACK_TIMEOUT_MS = 2000
 const KPSEWHICH_DELAY_MS = 400
+const JUMP_HIGHLIGHT_MS = 1500
+const REFOCUS_CHECK_MS = 150
 const SAME_RUN_SLACK_MS = 1000
 const INCLUDE = /\\(?:input|include)\s*\{([^}]+)\}/g
 const MAGIC_ROOT = /^\s*%\s*!TeX\s+root\s*=\s*(.+?)\s*$/im
@@ -71,6 +73,12 @@ class LivePreview {
         this.renderTimes = []
         this.usedImages = new Set()
         this.rootSeq = 0
+        // the source line a preview click jumped to flashes briefly
+        this.jumpDecoration = vscode.window.createTextEditorDecorationType({
+            isWholeLine: true,
+            backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+        })
+        context.subscriptions.push(this.jumpDecoration)
     }
 
     // ---- panel ----
@@ -160,13 +168,16 @@ class LivePreview {
             // the webview is untrusted input: only jump to files of this project, to a real line
             const file = this.files.get(normalize(String(msg.file ?? '')))
             if (!file || !Number.isInteger(msg.line) || msg.line < 0) return
-            this.gotoSource(file, msg.line).catch(e => this.log.warn(`go to source failed: ${e.message}`))
+            const column = Number.isInteger(msg.column) && msg.column >= 0 ? msg.column : undefined
+            this.gotoSource(file, msg.line, column).catch(e => this.log.warn(`go to source failed: ${e.message}`))
         } else if (msg.type === 'painted') {
             if (!Number.isFinite(msg.at - msg.t0)) return
             this.latencies.push(msg.at - msg.t0)
             if (this.latencies.length > MAX_SAMPLES) this.latencies.shift()
         } else if (msg.type === 'export') {
             this.exportPdf().catch(e => this.log.error(`export failed: ${e.message}`))
+        } else if (msg.type === 'log') {
+            this.log.debug(`webview: ${String(msg.message).slice(0, 2000)}`)
         }
     }
 
@@ -390,7 +401,7 @@ class LivePreview {
         }, REVEAL_DEBOUNCE_MS)
     }
 
-    async gotoSource(file, line) {
+    async gotoSource(file, line, column) {
         const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file))
         const visible = vscode.window.visibleTextEditors.find(e => e.document === document)
         const editor = await vscode.window.showTextDocument(document, {
@@ -398,10 +409,23 @@ class LivePreview {
             preserveFocus: false,
         })
         const target = Math.min(line, document.lineCount - 1)
-        const position = new vscode.Position(target, document.lineAt(target).firstNonWhitespaceCharacterIndex)
-        // set through the API: the selection event has no Keyboard/Mouse kind, so it is not echoed back
-        editor.selection = new vscode.Selection(position, position)
+        const text = document.lineAt(target)
+        const position = new vscode.Position(
+            target,
+            column === undefined ? text.firstNonWhitespaceCharacterIndex : Math.min(column, text.text.length),
+        )
+        // select the clicked word (like SyncTeX's highlight); set through the API, the selection event has
+        // no Keyboard/Mouse kind, so it is not echoed back to the preview
+        const word = document.getWordRangeAtPosition(position)
+        editor.selection = word ? new vscode.Selection(word.start, word.end) : new vscode.Selection(position, position)
         editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport)
+        editor.setDecorations(this.jumpDecoration, [text.range])
+        clearTimeout(this.jumpTimer)
+        this.jumpTimer = setTimeout(() => editor.setDecorations(this.jumpDecoration, []), JUMP_HIGHLIGHT_MS)
+        // The click that sent this jump also focused the preview, and VS Code can apply that focus after
+        // the editor was shown: take the focus back once if the preview ended up active.
+        await new Promise(resolve => setTimeout(resolve, REFOCUS_CHECK_MS))
+        if (this.panel?.active) await vscode.window.showTextDocument(document, { viewColumn: editor.viewColumn, preserveFocus: false })
     }
 
     // ---- export ----

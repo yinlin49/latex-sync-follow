@@ -1,7 +1,7 @@
 {
     "name": "latex-sync-follow",
-    "displayName": "LaTeX Live Preview & SyncTeX Follow",
-    "description": "Live LaTeX preview tab (rendered while you type, no PDF build) with two-way source sync, on-demand PDF export, and SyncTeX cursor follow for LaTeX Workshop.",
+    "displayName": "LaTeX Live Preview",
+    "description": "Live LaTeX preview tab rendered while you type (no PDF build), with word-accurate source <-> preview navigation and on-demand PDF export through LaTeX Workshop.",
     "version": "0.1.0",
     "publisher": "local",
     "license": "MIT",
@@ -32,11 +32,6 @@
     "contributes": {
         "commands": [
             {
-                "command": "latexSyncFollow.toggle",
-                "title": "Toggle Cursor → PDF Follow",
-                "category": "LaTeX SyncTeX Follow"
-            },
-            {
                 "command": "latexLivePreview.open",
                 "title": "Open Live Preview",
                 "category": "LaTeX",
@@ -54,16 +49,6 @@
                 "category": "LaTeX"
             }
         ],
-        "configuration": {
-            "title": "LaTeX SyncTeX Follow",
-            "properties": {
-                "latexSyncFollow.enabled": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Scroll the LaTeX Workshop PDF tab to the cursor line (SyncTeX forward search) whenever the cursor moves."
-                }
-            }
-        },
         "menus": {
             "editor/title": [
                 {
@@ -82,13 +67,12 @@
     "scripts": {
         "build": "node build.mjs",
         "vscode:prepublish": "node build.mjs",
-        "lint": "eslint .",
+        "lint": "eslint . --ignore-pattern .gitnexus/",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "typecheck": "tsc -p jsconfig.json",
-        "test": "node --test test/unit.test.js test/preview.test.mjs",
-        "e2e": "node test/e2e.js",
-        "e2e:preview": "node test/e2e-preview.js",
+        "test": "node --test test/preview.test.mjs",
+        "e2e": "node test/e2e-preview.js",
         "package": "vsce package",
         "verify:vsix": "node scripts/verify-vsix.mjs"
     },

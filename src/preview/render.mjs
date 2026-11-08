@@ -165,20 +165,82 @@ function splitRowsRaw(nodes) {
     return rows
 }
 
-/** Empty <span data-rl=N> markers before each node that starts a new source line (N = line within chunk). */
-function insertLineAnchors(nodes, seen) {
+/**
+ * Source anchors: an empty <span class="lp-a" data-rl=LINE data-c=COLUMN> (0-based; line within the chunk)
+ * before every positioned node that renders something: each word, command, formula and the text of each
+ * \item. A click maps to the anchor just before the caret (the word under it); a source line maps to the
+ * content between its anchors.
+ */
+function insertAnchors(nodes) {
     const out = []
+    let previous
     for (const node of nodes) {
-        const line = node.position?.start.line
-        if (line !== undefined && !seen.has(line) && node.type !== 'whitespace' && node.type !== 'parbreak') {
-            seen.add(line)
-            out.push(el('span', { class: 'lp-a', 'data-rl': String(line - 1) }))
+        const start = node.position?.start
+        // one anchor per token: an anchor between adjacent strings ("-" "-") would break ligatures (--, ``)
+        const continuesToken = node.type === 'string' && previous?.type === 'string'
+        previous = node
+        if (start && hasOwnAnchor(node) && !continuesToken) {
+            out.push(el('span', { class: 'lp-a', 'data-rl': String(start.line - 1), 'data-c': String(start.column - 1) }))
         }
-        // math and verbatim are other node types, so their content is never touched
-        if (node.type === 'environment') node.content = insertLineAnchors(node.content, seen)
+        // math, verbatim and comments are other node types: their content is never touched
+        if (node.type === 'environment' || node.type === 'group') {
+            node.content = insertAnchors(node.content)
+        } else if (node.type === 'macro' && node.args?.length && !NO_TEXT_ARGS.has(node.content) && !isHtmlLike(node)) {
+            // the text of \item, \textbf{...}, \section{...}, \caption{...}: the last argument
+            const text = node.args[node.args.length - 1]
+            text.content = insertAnchors(text.content)
+        }
         out.push(node)
     }
     return out
+}
+
+// Arguments that are keys, paths, lengths or definitions, not text on the page: no anchors inside.
+const NO_TEXT_ARGS = new Set([
+    'includegraphics',
+    'input',
+    'include',
+    'label',
+    'ref',
+    'eqref',
+    'pageref',
+    'autoref',
+    'cref',
+    'Cref',
+    'nameref',
+    'cite',
+    'citep',
+    'citet',
+    'parencite',
+    'textcite',
+    'autocite',
+    'url',
+    'bibliography',
+    'bibliographystyle',
+    'newcommand',
+    'renewcommand',
+    'providecommand',
+    'DeclareMathOperator',
+    'newenvironment',
+    'renewenvironment',
+    'def',
+    'hspace',
+    'vspace',
+    'vspace*',
+    'setlength',
+    'addtolength',
+    'documentclass',
+    'usepackage',
+    'begin',
+    'end',
+    'tag',
+    'hypersetup',
+])
+
+function hasOwnAnchor(node) {
+    if (node.type === 'whitespace' || node.type === 'parbreak' || node.type === 'comment') return false
+    // the list renderer drops what sits between items; an item's text carries its own anchors
+    return !(node.type === 'macro' && node.content === 'item')
 }
 
 /**
@@ -188,7 +250,7 @@ function insertLineAnchors(nodes, seen) {
  */
 export function renderChunk(chunkAst, ctx) {
     const ast = structuredClone(chunkAst)
-    ast.content = insertLineAnchors(ast.content, new Set())
+    ast.content = insertAnchors(ast.content)
     ast.content = expandEnvironments(ast.content, ctx.envs ?? new Map())
     expandUserMacros(ast, ctx.defs)
     const footnotes = []

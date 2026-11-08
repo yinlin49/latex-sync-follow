@@ -8,7 +8,6 @@ const REQUIRED = [
     'extension/package.json',
     'extension/extension.js',
     'extension/preview.js',
-    'extension/lib/fdb.js',
     'extension/lib/latex-log.js',
     'extension/dist/renderer.js',
     'extension/media/preview.js',
@@ -26,6 +25,9 @@ const FORBIDDEN = [
     /\.map$/,
     /\.vsix$/,
     /(^|\/)\.env/,
+    // tool folders and agent notes that land in the working tree (.claude, .gitnexus, ...)
+    /^extension\/\.[^/]+\//,
+    /^extension\/(AGENTS|CLAUDE)\.md$/i,
 ]
 
 /** Entries of a zip file: name -> { method, compressedSize, offset } (central directory). */
