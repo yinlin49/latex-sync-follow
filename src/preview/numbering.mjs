@@ -8,15 +8,22 @@ export const NUMBERED_MATH = new Set(['equation', 'align', 'gather', 'alignat', 
 const FLOATS = { figure: 'figure', 'figure*': 'figure', table: 'table', 'table*': 'table' }
 export const REF_MACROS = new Set(['ref', 'eqref', 'autoref', 'cref', 'Cref', 'pageref', 'nameref'])
 // a definition's body is not content: a \footnote or \section inside it must not count
-const DEFINITIONS = new Set(['newcommand', 'renewcommand', 'providecommand', 'DeclareMathOperator', 'def',
-    'newenvironment', 'renewenvironment'])
+const DEFINITIONS = new Set([
+    'newcommand',
+    'renewcommand',
+    'providecommand',
+    'DeclareMathOperator',
+    'def',
+    'newenvironment',
+    'renewenvironment',
+])
 export const CITE_MACROS = new Set(['cite', 'citep', 'citet', 'parencite', 'textcite', 'autocite'])
 
 export function newCounters() {
     return { chapter: 0, section: 0, subsection: 0, subsubsection: 0, equation: 0, figure: 0, table: 0, footnote: 0 }
 }
 
-export const envName = node => typeof node.env === 'string' ? node.env : node.env ? printRaw(node.env) : ''
+export const envName = node => (typeof node.env === 'string' ? node.env : node.env ? printRaw(node.env) : '')
 export const lastArg = node => node.args?.[node.args.length - 1]
 export const argText = arg => (arg ? printRaw(arg.content) : '').trim()
 const isStarred = node => node.args?.some(a => printRaw(a.content) === '*' && a.openMark === '')
@@ -78,7 +85,10 @@ function walkNode(node, st, hooks) {
             if (!NUMBERED_MATH.has(name)) return hooks.math?.(node, null)
             const rows = name === 'equation' || name === 'multline' ? [node.content] : mathRows(node.content)
             const numbered = rows.map(row => rowNumbering(row, st))
-            if (name === 'multline') numbered.forEach((r, i) => { if (i < numbered.length - 1) r.value = null })
+            if (name === 'multline')
+                numbered.forEach((r, i) => {
+                    if (i < numbered.length - 1) r.value = null
+                })
             for (const r of numbered) for (const key of r.labels) hooks.label?.(null, key, r.value ?? st.labelValue)
             return hooks.math?.(node, numbered)
         }
@@ -128,7 +138,13 @@ function walkMacro(node, st, hooks) {
         st.footnote++
         hooks.footnote?.(node, st.footnote)
     } else if (CITE_MACROS.has(name)) {
-        hooks.cite?.(node, argText(lastArg(node)).split(',').map(k => k.trim()).filter(Boolean))
+        hooks.cite?.(
+            node,
+            argText(lastArg(node))
+                .split(',')
+                .map(k => k.trim())
+                .filter(Boolean),
+        )
         return
     } else if (REF_MACROS.has(name)) {
         hooks.ref?.(node, argText(lastArg(node)))

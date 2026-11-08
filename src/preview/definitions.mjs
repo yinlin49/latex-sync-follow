@@ -9,8 +9,12 @@ const ENV_DEFINERS = new Set(['newenvironment', 'renewenvironment'])
 
 /** True for bodies using LaTeX internals (\@..., \makeatletter): those cannot be expanded faithfully. */
 export function usesInternals(body) {
-    return body.some(n => (n.type === 'macro' && (n.content.includes('@') || n.content === 'makeatletter'))
-        || (Array.isArray(n.content) && usesInternals(n.content)) || (n.args ?? []).some(a => usesInternals(a.content)))
+    return body.some(
+        n =>
+            (n.type === 'macro' && (n.content.includes('@') || n.content === 'makeatletter')) ||
+            (Array.isArray(n.content) && usesInternals(n.content)) ||
+            (n.args ?? []).some(a => usesInternals(a.content)),
+    )
 }
 
 /** `\def\name{body}` without parameters, in \newcommand form ({ name, signature, body }). */
@@ -92,8 +96,9 @@ function joinOpenEnvironment(begin, rest) {
     for (i = skipBlank(begin, i + 1); begin[i]?.type === 'group'; i = skipBlank(begin, i + 1)) {
         args.push({ type: 'argument', openMark: '{', closeMark: '}', content: begin[i].content })
     }
-    const close = rest.findIndex((n, k) => n.type === 'macro' && n.content === 'end'
-        && printRaw(rest[skipBlank(rest, k + 1)]?.content ?? []).trim() === name)
+    const close = rest.findIndex(
+        (n, k) => n.type === 'macro' && n.content === 'end' && printRaw(rest[skipBlank(rest, k + 1)]?.content ?? []).trim() === name,
+    )
     if (close < 0) return [...begin, ...rest]
     const after = skipBlank(rest, close + 1) + 1
     const environment = { type: 'environment', env: name, args, content: [...begin.slice(i), ...rest.slice(0, close)] }

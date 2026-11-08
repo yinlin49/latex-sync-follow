@@ -15,12 +15,22 @@ function model(files) {
     return { m, set: (name, text) => texts.set(path.resolve('/proj', name), text) }
 }
 const html = result => result.blocks.map(b => b.html).join('\n')
-const text = result => html(result).replace(/<span class="katex-mathml">.*?<\/span>/gs, '').replace(/<[^>]+>/g, '')
+const text = result =>
+    html(result)
+        .replace(/<span class="katex-mathml">.*?<\/span>/gs, '')
+        .replace(/<[^>]+>/g, '')
 
 test('blank lines split paragraphs; an unclosed environment merges until it closes', () => {
     const lines = ['a', '', '\\begin{itemize}', '\\item x', '', '\\item y', '\\end{itemize}', '', 'b']
     const chunks = splitChunks(lines, 0, lines.length, new ChunkParser())
-    assert.deepStrictEqual(chunks.map(c => [c.startLine, c.endLine]), [[0, 0], [2, 6], [8, 8]])
+    assert.deepStrictEqual(
+        chunks.map(c => [c.startLine, c.endLine]),
+        [
+            [0, 0],
+            [2, 6],
+            [8, 8],
+        ],
+    )
 })
 
 test('an environment left open while typing is capped instead of swallowing the file', () => {
@@ -51,17 +61,27 @@ test('inserting lines above shifts line numbers without re-rendering', () => {
     set('main.tex', doc('\n\n\nFirst.\n\nSecond.'))
     const r = m.update(ROOT)
     assert.strictEqual(r.stats.rendered, 0)
-    assert.deepStrictEqual(r.blocks.map(b => b.line), [5, 7])
+    assert.deepStrictEqual(
+        r.blocks.map(b => b.line),
+        [5, 7],
+    )
 })
 
 test('numbers sections, equations, floats; resolves refs, eqrefs, cites, footnotes', () => {
     const { m } = model({
-        'main.tex': doc([
-            '\\section{Intro}\\label{s:intro}', 'Text\\footnote{note}.', '',
-            '\\begin{align} a&=b \\label{e:a}\\\\ c&=d \\nonumber\\\\ e&=f \\label{e:c} \\end{align}', '',
-            '\\begin{figure}\\caption{Fig}\\label{f:x}\\end{figure}', '',
-            '\\subsection{Sub}', 'See \\ref{s:intro}, \\eqref{e:c}, Figure~\\ref{f:x}, \\ref{nope} \\cite{b,a} \\cite{a}.',
-        ].join('\n')),
+        'main.tex': doc(
+            [
+                '\\section{Intro}\\label{s:intro}',
+                'Text\\footnote{note}.',
+                '',
+                '\\begin{align} a&=b \\label{e:a}\\\\ c&=d \\nonumber\\\\ e&=f \\label{e:c} \\end{align}',
+                '',
+                '\\begin{figure}\\caption{Fig}\\label{f:x}\\end{figure}',
+                '',
+                '\\subsection{Sub}',
+                'See \\ref{s:intro}, \\eqref{e:c}, Figure~\\ref{f:x}, \\ref{nope} \\cite{b,a} \\cite{a}.',
+            ].join('\n'),
+        ),
     })
     const out = text(m.update(ROOT))
     assert.match(out, /1Intro/)
@@ -86,8 +106,15 @@ test('\\input and \\include splice files in place with their own file and lines'
         'sec/a.tex': '\\section{A}\n\nInside A.',
     })
     const r = m.update(ROOT)
-    assert.deepStrictEqual(r.blocks.map(b => [path.basename(b.file), b.line]),
-        [['main.tex', 2], ['a.tex', 0], ['a.tex', 2], ['main.tex', 6]])
+    assert.deepStrictEqual(
+        r.blocks.map(b => [path.basename(b.file), b.line]),
+        [
+            ['main.tex', 2],
+            ['a.tex', 0],
+            ['a.tex', 2],
+            ['main.tex', 6],
+        ],
+    )
     assert.strictEqual(r.files.length, 2)
 })
 
@@ -127,7 +154,9 @@ test('maketitle, images and references render', () => {
 })
 
 test('tabular rows stay separate (\\\\ is a row break there, a line break elsewhere)', () => {
-    const { m } = model({ 'main.tex': doc('\\begin{tabular}{lr}\\toprule\nName & Value \\\\\n\\midrule\nG & 42 \\\\\n\\bottomrule\n\\end{tabular}\n\nA\\\\B') })
+    const { m } = model({
+        'main.tex': doc('\\begin{tabular}{lr}\\toprule\nName & Value \\\\\n\\midrule\nG & 42 \\\\\n\\bottomrule\n\\end{tabular}\n\nA\\\\B'),
+    })
     const out = html(m.update(ROOT))
     assert.match(out, /<td>[^]*?G\s*<\/td><td[^>]*>\s*42/)
     assert.strictEqual((out.match(/<tr>/g) ?? []).length >= 2, true)
@@ -200,7 +229,9 @@ test('a file input twice renders twice; preamble \\input supplies macros', () =>
 })
 
 test('user text cannot hit object prototype keys; unsafe links lose their href', () => {
-    const { m } = model({ 'main.tex': doc('\\cite{constructor} \\ref{toString} \\href{javascript:alert(1)}{bad} \\href{https://ok.example}{good}') })
+    const { m } = model({
+        'main.tex': doc('\\cite{constructor} \\ref{toString} \\href{javascript:alert(1)}{bad} \\href{https://ok.example}{good}'),
+    })
     const out = html(m.update(ROOT))
     assert.match(out, /\[1\]/)
     assert.match(out, /\?\?/)
@@ -210,10 +241,12 @@ test('user text cannot hit object prototype keys; unsafe links lose their href',
 
 test('a local class: \\newenvironment wrapping a list, parameterless \\def, page from options + geometry', () => {
     const { m } = model({
-        'main.tex': '\\documentclass{cv}\n\\usepackage[left=0.5in,right=0.5in,top=0.4in]{geometry}\n\\begin{document}\n'
-            + '\\begin{sec}{Education}\n\\item[]\n\\vspace{-1em}\n\n\\item {\\bf Degree} \\hfill {2020 -- 2024} \\\\\nGPA \\& more \\hfill {\\em City}\n\\begin{itemize}\\item first\\end{itemize}\n\\end{sec}\n\\end{document}',
-        'cv.cls': '\\LoadClass[11pt,a4paper]{article}\n\\def\\gap{\\medskip}\n'
-            + '\\newenvironment{sec}[1]{\\gap\\MakeUppercase{{\\bf #1}}\\hrule\\begin{list}{}{\\setlength{\\leftmargin}{0em}}}{\\end{list}}',
+        'main.tex':
+            '\\documentclass{cv}\n\\usepackage[left=0.5in,right=0.5in,top=0.4in]{geometry}\n\\begin{document}\n' +
+            '\\begin{sec}{Education}\n\\item[]\n\\vspace{-1em}\n\n\\item {\\bf Degree} \\hfill {2020 -- 2024} \\\\\nGPA \\& more \\hfill {\\em City}\n\\begin{itemize}\\item first\\end{itemize}\n\\end{sec}\n\\end{document}',
+        'cv.cls':
+            '\\LoadClass[11pt,a4paper]{article}\n\\def\\gap{\\medskip}\n' +
+            '\\newenvironment{sec}[1]{\\gap\\MakeUppercase{{\\bf #1}}\\hrule\\begin{list}{}{\\setlength{\\leftmargin}{0em}}}{\\end{list}}',
     })
     const r = m.update(ROOT)
     const out = html(r)
@@ -231,7 +264,11 @@ test('a local class: \\newenvironment wrapping a list, parameterless \\def, page
 
 test('paragraph breaks count once; \\vspace and length assignments print nothing', () => {
     // inside one environment (one block), so the breaks are within the block
-    const { m } = model({ 'main.tex': doc('\\begin{center}\\begin{itemize}\\itemsep -3pt {}\\item a\\end{itemize}\nOne.\n\n\\vspace{0.4em}\n\nTwo.\\end{center}') })
+    const { m } = model({
+        'main.tex': doc(
+            '\\begin{center}\\begin{itemize}\\itemsep -3pt {}\\item a\\end{itemize}\nOne.\n\n\\vspace{0.4em}\n\nTwo.\\end{center}',
+        ),
+    })
     const out = html(m.update(ROOT))
     assert.doesNotMatch(out, /-3pt/)
     assert.strictEqual((out.match(/class="lp-par"/g) ?? []).length, 1)
@@ -240,7 +277,8 @@ test('paragraph breaks count once; \\vspace and length assignments print nothing
 
 test('resume.cls prints \\name and \\address lines at the top', () => {
     const { m } = model({
-        'main.tex': '\\documentclass{resume}\n\\name{Jane Doe}\n\\address{City \\\\ Country}\n\\address{mail}\n\\address{Title}\n\\begin{document}\nBody.\n\\end{document}',
+        'main.tex':
+            '\\documentclass{resume}\n\\name{Jane Doe}\n\\address{City \\\\ Country}\n\\address{mail}\n\\address{Title}\n\\begin{document}\nBody.\n\\end{document}',
     })
     const out = text(m.update(ROOT))
     assert.match(out, /^Jane DoeTitleCity\s*⋄?\s*Country/)

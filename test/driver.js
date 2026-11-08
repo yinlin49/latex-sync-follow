@@ -2,6 +2,7 @@
 // Shared Playwright driver for the end-to-end suites: a separate, real VS Code (Electron) with
 // LaTeX Workshop installed and this extension loaded from source.
 const { _electron } = require('playwright-core')
+const { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } = require('@vscode/test-electron')
 const { spawnSync } = require('child_process')
 const fs = require('fs')
 const os = require('os')
@@ -9,10 +10,13 @@ const path = require('path')
 const crypto = require('crypto')
 
 const REPO = path.resolve(__dirname, '..')
-const VSCODE_DIR = path.join(process.env.LOCALAPPDATA, 'Programs', 'Microsoft VS Code')
-const CODE_EXE = path.join(VSCODE_DIR, 'Code.exe')
-const CODE_CLI = path.join(VSCODE_DIR, 'bin', 'code.cmd')
 const LW_ID = 'james-yu.latex-workshop@10.20.0'
+// E2E_VSIX=<file>: test the packaged extension, installed as a user would, instead of the source tree
+const VSIX = process.env.E2E_VSIX ? path.resolve(process.env.E2E_VSIX) : null
+const LOCAL_CODE =
+    process.platform === 'win32' && process.env.LOCALAPPDATA
+        ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Microsoft VS Code', 'Code.exe')
+        : null
 const WORK = process.env.E2E_DIR || path.join(os.tmpdir(), 'latex-sync-follow-e2e')
 const PROJECT = path.join(WORK, 'project')
 const USER_DATA = path.join(WORK, 'user-data')
@@ -47,8 +51,35 @@ async function waitFor(fn, timeout, what) {
     throw new Error(`timeout waiting for ${what}`)
 }
 
+let codeExecutable
+
+/** VS Code to drive: $VSCODE_EXECUTABLE, the user install on Windows, else a downloaded stable build (CI). */
+async function vscodeExecutable() {
+    codeExecutable ??=
+        process.env.VSCODE_EXECUTABLE ||
+        (LOCAL_CODE && fs.existsSync(LOCAL_CODE)
+            ? LOCAL_CODE
+            : // download outside the repository, shared by both suites
+              await downloadAndUnzipVSCode({
+                  version: process.env.VSCODE_VERSION || 'stable',
+                  cachePath: path.join(os.tmpdir(), 'latex-sync-follow-vscode'),
+              }))
+    return codeExecutable
+}
+
+function installExtension(executable, extension) {
+    const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executable)
+    const args = [...cliArgs, '--extensions-dir', EXTENSIONS, '--install-extension', extension, '--force']
+    // the Windows CLI is a .cmd script, which needs a shell (and quoting for paths with spaces)
+    const windows = process.platform === 'win32'
+    const result = windows
+        ? spawnSync([cli, ...args].map(a => `"${a}"`).join(' '), { shell: true, encoding: 'utf8' })
+        : spawnSync(cli, args, { encoding: 'utf8' })
+    if (result.status !== 0) throw new Error(`installing ${extension} failed: ${result.stderr || result.stdout}`)
+}
+
 /** Fresh copy of the fixture and a clean VS Code profile using latex-settings.json plus `overrides`. */
-function prepare(overrides = {}, extraFiles = {}) {
+async function prepare(overrides = {}, extraFiles = {}) {
     fs.rmSync(PROJECT, { recursive: true, force: true })
     fs.rmSync(USER_DATA, { recursive: true, force: true })
     fs.cpSync(path.join(REPO, 'test', 'fixture'), PROJECT, { recursive: true })
@@ -63,19 +94,29 @@ function prepare(overrides = {}, extraFiles = {}) {
     }
     fs.mkdirSync(path.join(USER_DATA, 'User'), { recursive: true })
     fs.writeFileSync(path.join(USER_DATA, 'User', 'settings.json'), JSON.stringify(settings, null, 4))
+    const executable = await vscodeExecutable()
     if (!fs.existsSync(EXTENSIONS) || !fs.readdirSync(EXTENSIONS).some(d => d.startsWith('james-yu.latex-workshop'))) {
-        const install = spawnSync(`"${CODE_CLI}" --extensions-dir "${EXTENSIONS}" --install-extension ${LW_ID}`,
-            { shell: true, encoding: 'utf8' })
-        if (install.status !== 0) throw new Error(`LaTeX Workshop install failed: ${install.stderr}`)
+        installExtension(executable, LW_ID)
     }
+    if (VSIX) installExtension(executable, VSIX)
 }
 
 async function launch() {
     const app = await _electron.launch({
-        executablePath: CODE_EXE,
-        args: [PROJECT, `--user-data-dir=${USER_DATA}`, `--extensions-dir=${EXTENSIONS}`,
-            `--extensionDevelopmentPath=${REPO}`, '--skip-welcome', '--skip-release-notes',
-            '--disable-workspace-trust', '--new-window', '--log=local.latex-sync-follow:trace'],
+        executablePath: await vscodeExecutable(),
+        args: [
+            PROJECT,
+            `--user-data-dir=${USER_DATA}`,
+            `--extensions-dir=${EXTENSIONS}`,
+            ...(VSIX ? [] : [`--extensionDevelopmentPath=${REPO}`]),
+            // CI runners run Electron without the setuid sandbox helper
+            ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-gpu'] : []),
+            '--skip-welcome',
+            '--skip-release-notes',
+            '--disable-workspace-trust',
+            '--new-window',
+            '--log=local.latex-sync-follow:trace',
+        ],
         timeout: 90000,
     })
     const win = await app.firstWindow()
@@ -106,7 +147,10 @@ async function openFile(win, relFile) {
 
 async function cursorLine(win) {
     // absent while a non-text editor (the PDF or preview tab) is active
-    const text = await win.locator('[id="status.editor.selection"]').innerText({ timeout: 1000 }).catch(() => '')
+    const text = await win
+        .locator('[id="status.editor.selection"]')
+        .innerText({ timeout: 1000 })
+        .catch(() => '')
     return Number(/Ln (\d+)/.exec(text)?.[1])
 }
 
@@ -145,6 +189,21 @@ function summary() {
 }
 
 module.exports = {
-    WORK, PROJECT, results, sleep, check, lineOf, md5, waitFor, prepare, launch,
-    runCommand, openFile, cursorLine, gotoLine, clickLine, saveAll, summary,
+    WORK,
+    PROJECT,
+    results,
+    sleep,
+    check,
+    lineOf,
+    md5,
+    waitFor,
+    prepare,
+    launch,
+    runCommand,
+    openFile,
+    cursorLine,
+    gotoLine,
+    clickLine,
+    saveAll,
+    summary,
 }

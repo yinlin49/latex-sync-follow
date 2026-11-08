@@ -1,0 +1,14 @@
+# Weekly update PRs for the pinned GitHub Actions and npm dependencies (each runs the full CI).
+version: 2
+updates:
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+          interval: weekly
+    - package-ecosystem: npm
+      directory: /
+      schedule:
+          interval: weekly
+      groups:
+          dev-dependencies:
+              dependency-type: development

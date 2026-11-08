@@ -21,14 +21,18 @@ const INCLUDE = /\\(?:input|include)\s*\{([^}]+)\}/g
 const MAGIC_ROOT = /^\s*%\s*!TeX\s+root\s*=\s*(.+?)\s*$/im
 const { Keyboard, Mouse } = vscode.TextEditorSelectionChangeKind
 
-const normalize = p => process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p)
+const normalize = p => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p))
 const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
 /** Open editor text, else disk text, without caching (used to scan candidate root files). */
 function readUncached(file) {
     const open = vscode.workspace.textDocuments.find(d => d.uri.scheme === 'file' && normalize(d.uri.fsPath) === normalize(file))
     if (open) return open.getText()
-    try { return fs.readFileSync(file, 'utf8') } catch { return undefined }
+    try {
+        return fs.readFileSync(file, 'utf8')
+    } catch {
+        return undefined
+    }
 }
 
 /**
@@ -39,7 +43,10 @@ function includesFile(file, target, chain) {
     if (chain.length > 8 || chain.includes(normalize(file))) return false
     const text = readUncached(file)
     if (text === undefined) return false
-    const code = text.split(/\r?\n/).filter(line => !/^\s*%/.test(line)).join('\n')
+    const code = text
+        .split(/\r?\n/)
+        .filter(line => !/^\s*%/.test(line))
+        .join('\n')
     for (const [, name] of code.matchAll(INCLUDE)) {
         const included = path.resolve(path.dirname(chain[0] ?? file), path.extname(name) ? name : `${name}.tex`)
         if (normalize(included) === target || includesFile(included, target, [...chain, normalize(file)])) return true
@@ -47,7 +54,7 @@ function includesFile(file, target, chain) {
     return false
 }
 
-const percentile = (sorted, p) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(p / 100 * sorted.length))] : NaN
+const percentile = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : NaN)
 
 class LivePreview {
     constructor(context, log, isLatex) {
@@ -81,15 +88,23 @@ class LivePreview {
         if (this.panel) {
             this.panel.reveal(undefined, true)
         } else {
-            this.attach(vscode.window.createWebviewPanel(VIEW_TYPE, 'LaTeX Preview',
-                { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true }, this.webviewOptions()))
+            this.attach(
+                vscode.window.createWebviewPanel(
+                    VIEW_TYPE,
+                    'LaTeX Preview',
+                    { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+                    this.webviewOptions(),
+                ),
+            )
         }
         this.render()
     }
 
     webviewOptions() {
-        const roots = [vscode.Uri.joinPath(this.context.extensionUri, 'media'),
-            ...(vscode.workspace.workspaceFolders ?? []).map(f => f.uri)]
+        const roots = [
+            vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+            ...(vscode.workspace.workspaceFolders ?? []).map(f => f.uri),
+        ]
         if (this.root) roots.push(vscode.Uri.file(path.dirname(this.root)))
         return { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: roots }
     }
@@ -103,7 +118,9 @@ class LivePreview {
             this.panel = undefined
             this.resetAck()
         })
-        panel.onDidChangeViewState(() => { if (panel.visible && this.stale) this.render() })
+        panel.onDidChangeViewState(() => {
+            if (panel.visible && this.stale) this.render()
+        })
         panel.webview.onDidReceiveMessage(msg => this.onMessage(msg))
     }
 
@@ -161,7 +178,11 @@ class LivePreview {
         if (open) return open.getText()
         if (!this.diskText.has(key)) {
             let text
-            try { text = fs.readFileSync(file, 'utf8') } catch { text = undefined }
+            try {
+                text = fs.readFileSync(file, 'utf8')
+            } catch {
+                text = undefined
+            }
             this.diskText.set(key, text)
         }
         return this.diskText.get(key)
@@ -223,9 +244,15 @@ class LivePreview {
     }
 
     imageSrc(file, stat) {
-        const inRoots = this.panel?.webview.options.localResourceRoots?.some(root => normalize(file).startsWith(normalize(root.fsPath) + path.sep))
+        const inRoots = this.panel?.webview.options.localResourceRoots?.some(root =>
+            normalize(file).startsWith(normalize(root.fsPath) + path.sep),
+        )
         // the mtime query makes the webview fetch an image again after it was overwritten
-        if (inRoots) return this.panel.webview.asWebviewUri(vscode.Uri.file(file)).with({ query: `v=${Math.round(stat.mtimeMs)}` }).toString()
+        if (inRoots)
+            return this.panel.webview
+                .asWebviewUri(vscode.Uri.file(file))
+                .with({ query: `v=${Math.round(stat.mtimeMs)}` })
+                .toString()
         if (stat.size > MAX_INLINE_IMAGE_BYTES) return ''
         const type = file.endsWith('.svg') ? 'image/svg+xml' : `image/${path.extname(file).slice(1).replace('jpg', 'jpeg')}`
         return `data:${type};base64,${fs.readFileSync(file).toString('base64')}`
@@ -270,7 +297,12 @@ class LivePreview {
             this.log.error(`live preview render failed: ${e.stack ?? e}`)
             this.sentKeys.clear()
             const html = `<div class="lp-error">Live preview failed: ${escapeHtml(String(e.message))}</div>`
-            void this.panel.webview.postMessage({ type: 'update', version: ++this.version, files: [], blocks: [{ id: 'error', key: 'error', file: 0, line: 0, endLine: 0, html }] })
+            void this.panel.webview.postMessage({
+                type: 'update',
+                version: ++this.version,
+                files: [],
+                blocks: [{ id: 'error', key: 'error', file: 0, line: 0, endLine: 0, html }],
+            })
             return
         }
         for (const [key, image] of this.images) {
@@ -282,7 +314,11 @@ class LivePreview {
         this.files = new Map(fileList.map(f => [normalize(f), f]))
         const fileIndex = new Map(fileList.map((f, i) => [f, i]))
         const blocks = result.blocks.map(b => ({
-            id: b.id, key: b.key, file: fileIndex.get(b.file), line: b.line, endLine: b.endLine,
+            id: b.id,
+            key: b.key,
+            file: fileIndex.get(b.file),
+            line: b.line,
+            endLine: b.endLine,
             html: this.sentKeys.has(b.key) ? undefined : b.html,
         }))
         this.sentKeys = new Set(result.blocks.map(b => b.key))
@@ -291,8 +327,18 @@ class LivePreview {
         const cursorFile = editor && this.files.get(normalize(editor.document.uri.fsPath))
         const cursor = cursorFile ? { file: cursorFile, line: editor.selection.active.line } : undefined
         this.awaitingAck = true
-        void this.panel.webview.postMessage({ type: 'update', version: ++this.version, t0, files: fileList, blocks, cursor, page: result.page })
-        this.log.trace(`render ${result.stats.ms.toFixed(1)} ms, parsed ${result.stats.parsed}, rendered ${result.stats.rendered}/${result.stats.blocks}`)
+        void this.panel.webview.postMessage({
+            type: 'update',
+            version: ++this.version,
+            t0,
+            files: fileList,
+            blocks,
+            cursor,
+            page: result.page,
+        })
+        this.log.trace(
+            `render ${result.stats.ms.toFixed(1)} ms, parsed ${result.stats.parsed}, rendered ${result.stats.rendered}/${result.stats.blocks}`,
+        )
     }
 
     // ---- root file ----
@@ -347,8 +393,10 @@ class LivePreview {
     async gotoSource(file, line) {
         const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file))
         const visible = vscode.window.visibleTextEditors.find(e => e.document === document)
-        const editor = await vscode.window.showTextDocument(document,
-            { viewColumn: visible?.viewColumn ?? this.sourceColumn ?? vscode.ViewColumn.One, preserveFocus: false })
+        const editor = await vscode.window.showTextDocument(document, {
+            viewColumn: visible?.viewColumn ?? this.sourceColumn ?? vscode.ViewColumn.One,
+            preserveFocus: false,
+        })
         const target = Math.min(line, document.lineCount - 1)
         const position = new vscode.Position(target, document.lineAt(target).firstNonWhitespaceCharacterIndex)
         // set through the API: the selection event has no Keyboard/Mouse kind, so it is not echoed back
@@ -370,14 +418,17 @@ class LivePreview {
         await vscode.window.showTextDocument(rootDocument, { viewColumn: this.sourceColumn ?? vscode.ViewColumn.One, preserveFocus: false })
         const started = Date.now()
         try {
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: `Exporting ${path.basename(this.root, '.tex')}.pdf with LaTeX…`,
-                cancellable: true,
-            }, async (progress, token) => {
-                token.onCancellationRequested(() => void vscode.commands.executeCommand('latex-workshop.kill'))
-                await vscode.commands.executeCommand('latex-workshop.build')
-            })
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Exporting ${path.basename(this.root, '.tex')}.pdf with LaTeX…`,
+                    cancellable: true,
+                },
+                async (progress, token) => {
+                    token.onCancellationRequested(() => void vscode.commands.executeCommand('latex-workshop.kill'))
+                    await vscode.commands.executeCommand('latex-workshop.build')
+                },
+            )
         } catch (e) {
             void vscode.window.showErrorMessage(`PDF export failed: ${e.message}`)
             throw e
@@ -391,7 +442,11 @@ class LivePreview {
         const newestSource = Math.max(0, ...[...this.files.values(), this.root].map(mtime))
         const produced = mtime(pdf) > 0 && mtime(pdf) >= newestSource - SAME_RUN_SLACK_MS
         let runLog = ''
-        try { runLog = fs.readFileSync(`${base}.log`, 'latin1') } catch { /* no log: build did not start */ }
+        try {
+            runLog = fs.readFileSync(`${base}.log`, 'latin1')
+        } catch {
+            /* no log: build did not start */
+        }
         const result = { pdf, produced, errors: LOG_ERROR.test(runLog), ms: Date.now() - started }
         this.log.info(`export ${JSON.stringify(result)}`)
         this.reportExport(result).catch(e => this.log.warn(`export follow-up failed: ${e.message}`))
@@ -400,10 +455,19 @@ class LivePreview {
 
     async reportExport({ pdf, produced, errors }) {
         const choice = !produced
-            ? await vscode.window.showErrorMessage('PDF export failed: LaTeX produced no PDF. See the Problems panel.', 'Show Problems', 'Open Log')
+            ? await vscode.window.showErrorMessage(
+                  'PDF export failed: LaTeX produced no PDF. See the Problems panel.',
+                  'Show Problems',
+                  'Open Log',
+              )
             : errors
-                ? await vscode.window.showWarningMessage(`Exported ${path.basename(pdf)} with LaTeX errors (see Problems).`, 'Open PDF', 'Save As…', 'Show Problems')
-                : await vscode.window.showInformationMessage(`Exported ${path.basename(pdf)}.`, 'Open PDF', 'Save As…', 'Reveal in Explorer')
+              ? await vscode.window.showWarningMessage(
+                    `Exported ${path.basename(pdf)} with LaTeX errors (see Problems).`,
+                    'Open PDF',
+                    'Save As…',
+                    'Show Problems',
+                )
+              : await vscode.window.showInformationMessage(`Exported ${path.basename(pdf)}.`, 'Open PDF', 'Save As…', 'Reveal in Explorer')
         if (choice === 'Open PDF') await vscode.commands.executeCommand('latex-workshop.view')
         else if (choice === 'Show Problems') await vscode.commands.executeCommand('workbench.actions.view.problems')
         else if (choice === 'Open Log') await vscode.commands.executeCommand('latex-workshop.compilerlog')
@@ -453,8 +517,7 @@ function activatePreview(context, log, isLatex) {
         vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
             async deserializeWebviewPanel(panel) {
                 // restored after a reload: take the root from the active (or first visible) LaTeX editor
-                const editor = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors]
-                    .find(e => e && isLatex(e.document))
+                const editor = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find(e => e && isLatex(e.document))
                 if (editor) preview.root = await preview.resolveRoot(editor.document)
                 preview.attach(panel)
             },

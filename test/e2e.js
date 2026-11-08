@@ -5,8 +5,21 @@
 const fs = require('fs')
 const path = require('path')
 const {
-    WORK, PROJECT, sleep, check, lineOf, md5, waitFor, prepare, launch,
-    runCommand, openFile, cursorLine, gotoLine, clickLine, summary,
+    WORK,
+    PROJECT,
+    sleep,
+    check,
+    lineOf,
+    md5,
+    waitFor,
+    prepare,
+    launch,
+    runCommand,
+    openFile,
+    cursorLine,
+    gotoLine,
+    clickLine,
+    summary,
 } = require('./driver')
 
 const BUILD_TIMEOUT = 60000
@@ -18,17 +31,26 @@ const AUTO_BUILD = {
 }
 
 async function syncStatus(win) {
-    return win.locator('.statusbar-item', { hasText: 'SyncTeX' }).first().innerText().catch(() => '')
+    return win
+        .locator('.statusbar-item', { hasText: 'SyncTeX' })
+        .first()
+        .innerText()
+        .catch(() => '')
 }
 
 async function viewerFrame(win) {
-    return waitFor(async () => {
-        const frame = win.frames().find(f => f.url().includes('viewer.html'))
-        if (!frame) return undefined
-        const ready = await frame.evaluate(() => Boolean(window.PDFViewerApplication?.pdfDocument
-            && document.querySelector('.textLayer span')))
-        return ready ? frame : undefined
-    }, 60000, 'PDF viewer frame')
+    return waitFor(
+        async () => {
+            const frame = win.frames().find(f => f.url().includes('viewer.html'))
+            if (!frame) return undefined
+            const ready = await frame.evaluate(() =>
+                Boolean(window.PDFViewerApplication?.pdfDocument && document.querySelector('.textLayer span')),
+            )
+            return ready ? frame : undefined
+        },
+        60000,
+        'PDF viewer frame',
+    )
 }
 
 /** Records every SyncTeX indicator box the viewer draws (they fade out and are removed). */
@@ -38,25 +60,29 @@ async function recordIndicators(frame) {
         window.__indicators = []
         const container = document.getElementById('viewerContainer')
         new MutationObserver(mutations => {
-            for (const m of mutations) for (const node of m.addedNodes) {
-                if (!node.classList?.contains('synctex-indicator-rect')) continue
-                const r = node.getBoundingClientRect()
-                const c = container.getBoundingClientRect()
-                window.__indicators.push({
-                    at: Date.now(),
-                    top: r.top + container.scrollTop,
-                    bottom: r.bottom + container.scrollTop,
-                    visible: r.top >= c.top - 1 && r.bottom <= c.bottom + 1,
-                })
-            }
+            for (const m of mutations)
+                for (const node of m.addedNodes) {
+                    if (!node.classList?.contains('synctex-indicator-rect')) continue
+                    const r = node.getBoundingClientRect()
+                    const c = container.getBoundingClientRect()
+                    window.__indicators.push({
+                        at: Date.now(),
+                        top: r.top + container.scrollTop,
+                        bottom: r.bottom + container.scrollTop,
+                        visible: r.top >= c.top - 1 && r.bottom <= c.bottom + 1,
+                    })
+                }
         }).observe(document.body, { childList: true, subtree: true })
         window.__textUnder = index => {
             const box = window.__indicators[index]
             const scroll = container.scrollTop
-            return [...document.querySelectorAll('.textLayer span')].filter(span => {
-                const q = span.getBoundingClientRect()
-                return q.bottom + scroll > box.top + 1 && q.top + scroll < box.bottom - 1
-            }).map(span => span.textContent).join(' ')
+            return [...document.querySelectorAll('.textLayer span')]
+                .filter(span => {
+                    const q = span.getBoundingClientRect()
+                    return q.bottom + scroll > box.top + 1 && q.top + scroll < box.bottom - 1
+                })
+                .map(span => span.textContent)
+                .join(' ')
         }
     })
 }
@@ -84,10 +110,14 @@ async function pdfText(frame) {
 }
 
 async function waitForPdfText(win, needle, timeout = BUILD_TIMEOUT) {
-    return waitFor(async () => {
-        const frame = await viewerFrame(win)
-        return (await pdfText(frame)).includes(needle)
-    }, timeout, `PDF to contain ${needle}`)
+    return waitFor(
+        async () => {
+            const frame = await viewerFrame(win)
+            return (await pdfText(frame)).includes(needle)
+        },
+        timeout,
+        `PDF to contain ${needle}`,
+    )
 }
 
 /** In sync = latexmk's recorded md5 for the file equals the file on disk. */
@@ -116,8 +146,11 @@ async function inverseSearch(win, frame, marker, relFile) {
     await span.dblclick()
     const expected = lineOf(relFile, marker)
     try {
-        await waitFor(async () => (await win.title()).includes(path.basename(relFile))
-            && (await cursorLine(win)) === expected, 5000, `jump to ${relFile}:${expected}`)
+        await waitFor(
+            async () => (await win.title()).includes(path.basename(relFile)) && (await cursorLine(win)) === expected,
+            5000,
+            `jump to ${relFile}:${expected}`,
+        )
         return { ok: true, detail: `${relFile}:${expected}` }
     } catch {
         return { ok: false, detail: `got ${await win.title()} Ln ${await cursorLine(win)}, want ${relFile}:${expected}` }
@@ -130,8 +163,11 @@ async function testBuildAndView(win) {
     await runCommand(win, 'LaTeX Workshop: Build LaTeX project')
     // synctex.gz appears after the first pass; wait for latexmk's last pass (fdb records main.tex)
     const main = path.join(PROJECT, 'main.tex')
-    await waitFor(async () => compiledMd5('main.tex') === md5(main) && fs.existsSync(path.join(PROJECT, 'main.synctex.gz')),
-        BUILD_TIMEOUT, 'first build')
+    await waitFor(
+        async () => compiledMd5('main.tex') === md5(main) && fs.existsSync(path.join(PROJECT, 'main.synctex.gz')),
+        BUILD_TIMEOUT,
+        'first build',
+    )
     check('first build produces PDF + SyncTeX', true, `${Date.now() - start} ms incl. bibtex`)
     await sleep(1000) // LW refreshes viewers right after BUILD_DONE
     await runCommand(win, 'LaTeX Workshop: View LaTeX PDF file')
@@ -139,8 +175,10 @@ async function testBuildAndView(win) {
     const pages = await frame.evaluate(() => window.PDFViewerApplication.pagesCount)
     check('PDF opens in a VS Code tab', pages >= 3, `${pages} pages`)
     const text = await pdfText(frame)
-    check('multi-file content, citation, table, figure in PDF',
-        ['ALPHAONE', 'BETATWO', 'GAMMAROW', 'FIGCAP', 'OMEGAEND', 'Knuth'].every(m => text.includes(m)))
+    check(
+        'multi-file content, citation, table, figure in PDF',
+        ['ALPHAONE', 'BETATWO', 'GAMMAROW', 'FIGCAP', 'OMEGAEND', 'Knuth'].every(m => text.includes(m)),
+    )
 }
 
 async function testForwardSync(win) {
@@ -160,8 +198,11 @@ async function testForwardSync(win) {
         const clickedAt = Date.now()
         await clickLine(win, lineOf('sections/results.tex', marker))
         const hit = await nextIndicator(frame, before).catch(e => ({ text: e.message }))
-        check(`click source line -> PDF highlights ${marker}`, hit.text.includes(marker) && hit.visible,
-            `${hit.at - clickedAt} ms, visible=${hit.visible}, text="${hit.text.slice(0, 60)}"`)
+        check(
+            `click source line -> PDF highlights ${marker}`,
+            hit.text.includes(marker) && hit.visible,
+            `${hit.at - clickedAt} ms, visible=${hit.visible}, text="${hit.text.slice(0, 60)}"`,
+        )
     }
 
     await openFile(win, 'main.tex')
@@ -192,7 +233,9 @@ async function testCursorBurst(win) {
 async function testInverseSearch(win) {
     const frame = await viewerFrame(win)
     await recordIndicators(frame)
-    await frame.evaluate(() => { window.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width' })
+    await frame.evaluate(() => {
+        window.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width'
+    })
     await sleep(800)
     const before = await indicatorCount(frame)
     const cases = [
@@ -204,16 +247,22 @@ async function testInverseSearch(win) {
         ['OMEGAEND', 'main.tex', '0.75'],
     ]
     for (const [marker, file, scale] of cases) {
-        await frame.evaluate(s => { window.PDFViewerApplication.pdfViewer.currentScaleValue = s }, scale)
+        await frame.evaluate(s => {
+            window.PDFViewerApplication.pdfViewer.currentScaleValue = s
+        }, scale)
         await sleep(600)
         // scroll somewhere else first so the click happens at a non-zero, non-initial scroll offset
-        await frame.evaluate(() => { document.getElementById('viewerContainer').scrollTop += 137 })
+        await frame.evaluate(() => {
+            document.getElementById('viewerContainer').scrollTop += 137
+        })
         const result = await inverseSearch(win, frame, marker, file)
         check(`double-click PDF "${marker}" at zoom ${scale} -> source line`, result.ok, result.detail)
     }
     await sleep(800)
     check('inverse search does not bounce back into a forward sync', (await indicatorCount(frame)) === before)
-    await frame.evaluate(() => { window.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width' })
+    await frame.evaluate(() => {
+        window.PDFViewerApplication.pdfViewer.currentScaleValue = 'page-width'
+    })
 }
 
 async function testLiveCompile(win) {
@@ -254,8 +303,11 @@ async function testEditsDuringCompile(win) {
     await waitForPdfText(win, 'RAPID5')
     await sleep(3000) // any late, older build would land here
     const text = await pdfText(await viewerFrame(win))
-    check('edits during compile: final PDF has the newest text', ['RAPID1', 'RAPID5'].every(m => text.includes(m)),
-        `${Date.now() - lastEdit - 3000} ms to RAPID5`)
+    check(
+        'edits during compile: final PDF has the newest text',
+        ['RAPID1', 'RAPID5'].every(m => text.includes(m)),
+        `${Date.now() - lastEdit - 3000} ms to RAPID5`,
+    )
     const file = path.join(PROJECT, 'sections', 'results.tex')
     check('fdb md5 matches disk (no stale build won)', compiledMd5('sections/results.tex') === md5(file))
 }
@@ -278,13 +330,19 @@ async function testCompileError(win) {
     }
     await gotoLine(win, 1)
     await row.click()
-    await waitFor(async () => (await win.title()).includes('results.tex') && (await cursorLine(win)) === errorLine,
-        5000, 'jump to error').then(() => check('click problem -> jumps to file:line', true, `results.tex:${errorLine}`),
-        async () => check('click problem -> jumps to file:line', false, `Ln ${await cursorLine(win)}`))
+    await waitFor(
+        async () => (await win.title()).includes('results.tex') && (await cursorLine(win)) === errorLine,
+        5000,
+        'jump to error',
+    ).then(
+        () => check('click problem -> jumps to file:line', true, `results.tex:${errorLine}`),
+        async () => check('click problem -> jumps to file:line', false, `Ln ${await cursorLine(win)}`),
+    )
     // latexmk still writes PDF + SyncTeX on errors; the viewer must show that PDF or the mapping is off
     await waitForPdfText(win, 'ERRWORD', 10000).then(
         async () => check('failed build: viewer shows the PDF its SyncTeX describes', true, await syncStatus(win)),
-        async () => check('failed build: viewer shows the PDF its SyncTeX describes', false, await syncStatus(win)))
+        async () => check('failed build: viewer shows the PDF its SyncTeX describes', false, await syncStatus(win)),
+    )
 
     await openFile(win, 'sections/results.tex')
     await gotoLine(win, errorLine)
@@ -293,10 +351,18 @@ async function testCompileError(win) {
     const file = path.join(PROJECT, 'sections', 'results.tex')
     await waitFor(async () => !fs.readFileSync(file, 'utf8').includes('undefinedcmdxyz'), 10000, 'fix autosaved')
     await waitFor(async () => compiledMd5('sections/results.tex') === md5(file), BUILD_TIMEOUT, 'fixed source compiled')
-    await waitFor(async () => (await win.locator('.markers-panel .monaco-list-row',
-        { hasText: 'Undefined control sequence' }).count()) === 0, BUILD_TIMEOUT, 'error cleared')
-        .then(() => check('fixing the error clears Problems', true), () => check('fixing the error clears Problems', false))
-    await waitForPdfText(win, 'ERRWORD').then(() => check('PDF updated after fix', true), () => check('PDF updated after fix', false))
+    await waitFor(
+        async () => (await win.locator('.markers-panel .monaco-list-row', { hasText: 'Undefined control sequence' }).count()) === 0,
+        BUILD_TIMEOUT,
+        'error cleared',
+    ).then(
+        () => check('fixing the error clears Problems', true),
+        () => check('fixing the error clears Problems', false),
+    )
+    await waitForPdfText(win, 'ERRWORD').then(
+        () => check('PDF updated after fix', true),
+        () => check('PDF updated after fix', false),
+    )
 }
 
 async function testXelatexRecipe(win) {
@@ -355,16 +421,22 @@ async function testErrorsWithoutMatchingPdf(win) {
     // xelatex + error: latexmk skips xdvipdfmx, so the PDF is older than the fresh SyncTeX
     const xeEdit = ' \\undefinedcmdxyz'
     const xe = await editAndProbe(win, 'sections/results.tex', 'BETATWO', xeEdit)
-    check('xelatex error (stale PDF): follow paused, status out of date',
-        !xe.synced && xe.status.includes('out of date'), `synced=${xe.synced}, "${xe.status}"`)
+    check(
+        'xelatex error (stale PDF): follow paused, status out of date',
+        !xe.synced && xe.status.includes('out of date'),
+        `synced=${xe.synced}, "${xe.status}"`,
+    )
     await undoEdit(win, 'sections/results.tex', 'BETATWO', xeEdit)
     check('xelatex error fixed: back in sync', (await syncStatus(win)).trim() === 'SyncTeX', await syncStatus(win))
 
     // fatal error: no PDF written, SyncTeX deleted
     const fatalEdit = '\\usepackage{nonexistentpkgxyz}'
     const fatal = await editAndProbe(win, 'main.tex', '\\usepackage{hyperref}', fatalEdit)
-    check('fatal error (no PDF): follow paused, status out of date',
-        !fatal.synced && fatal.status.includes('out of date'), `synced=${fatal.synced}, "${fatal.status}"`)
+    check(
+        'fatal error (no PDF): follow paused, status out of date',
+        !fatal.synced && fatal.status.includes('out of date'),
+        `synced=${fatal.synced}, "${fatal.status}"`,
+    )
     await undoEdit(win, 'main.tex', '\\usepackage{hyperref}', fatalEdit)
     const frame = await viewerFrame(win)
     const before = await indicatorCount(frame)
@@ -381,8 +453,11 @@ async function testRestart(app) {
         check('reopen VS Code: PDF tab restored', true)
         await recordIndicators(frame)
         await openFile(win, 'sections/results.tex')
-        await waitFor(async () => !(await syncStatus(win)).includes('out of date') && (await syncStatus(win)) !== '',
-            15000, 'status').catch(() => undefined)
+        await waitFor(
+            async () => !(await syncStatus(win)).includes('out of date') && (await syncStatus(win)) !== '',
+            15000,
+            'status',
+        ).catch(() => undefined)
         const before = await indicatorCount(frame)
         await clickLine(win, lineOf('sections/results.tex', 'BETATWO'))
         const hit = await nextIndicator(frame, before).catch(e => ({ text: e.message }))
@@ -395,13 +470,22 @@ async function testRestart(app) {
 }
 
 async function main() {
-    prepare(AUTO_BUILD)
+    await prepare(AUTO_BUILD)
     const { app, win } = await launch()
     let closed = false
     try {
         const only = process.env.E2E_ONLY?.split(',')
-        const steps = [testBuildAndView, testForwardSync, testCursorBurst, testInverseSearch,
-            testLiveCompile, testEditsDuringCompile, testCompileError, testXelatexRecipe, testErrorsWithoutMatchingPdf]
+        const steps = [
+            testBuildAndView,
+            testForwardSync,
+            testCursorBurst,
+            testInverseSearch,
+            testLiveCompile,
+            testEditsDuringCompile,
+            testCompileError,
+            testXelatexRecipe,
+            testErrorsWithoutMatchingPdf,
+        ]
         for (const step of steps.filter(s => s === testBuildAndView || !only || only.includes(s.name))) {
             try {
                 await step(win)

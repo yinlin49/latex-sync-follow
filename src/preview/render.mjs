@@ -14,15 +14,74 @@ import { expandEnvironments } from './definitions.mjs'
 const SAFE_LINK = /^(?:https?:|mailto:|#)/i
 
 // Layout-only commands with no visible content in a flowing HTML preview.
-const IGNORED = new Set(['centering', 'noindent', 'indent', 'vspace', 'vfill', 'newpage', 'clearpage', 'cleardoublepage',
-    'pagebreak', 'nopagebreak', 'linebreak', 'smallskip', 'medskip', 'bigskip', 'hline', 'toprule', 'midrule',
-    'bottomrule', 'cline', 'cmidrule', 'label', 'newcommand', 'renewcommand', 'providecommand', 'DeclareMathOperator',
-    'newenvironment', 'renewenvironment', 'def', 'bibliographystyle', 'protect', 'phantomsection', 'addcontentsline', 'thispagestyle', 'pagestyle', 'setlength',
-    'raggedright', 'raggedleft', 'par', 'relax', 'nonumber', 'notag',
-    'title', 'author', 'date', 'thanks']) // \title etc. only store text that \maketitle shows
+const IGNORED = new Set([
+    'centering',
+    'noindent',
+    'indent',
+    'vspace',
+    'vfill',
+    'newpage',
+    'clearpage',
+    'cleardoublepage',
+    'pagebreak',
+    'nopagebreak',
+    'linebreak',
+    'smallskip',
+    'medskip',
+    'bigskip',
+    'hline',
+    'toprule',
+    'midrule',
+    'bottomrule',
+    'cline',
+    'cmidrule',
+    'label',
+    'newcommand',
+    'renewcommand',
+    'providecommand',
+    'DeclareMathOperator',
+    'newenvironment',
+    'renewenvironment',
+    'def',
+    'bibliographystyle',
+    'protect',
+    'phantomsection',
+    'addcontentsline',
+    'thispagestyle',
+    'pagestyle',
+    'setlength',
+    'raggedright',
+    'raggedleft',
+    'par',
+    'relax',
+    'nonumber',
+    'notag',
+    'title',
+    'author',
+    'date',
+    'thanks',
+]) // \title etc. only store text that \maketitle shows
 // Environments the stylesheet lays out; any other unknown environment is flagged as approximate.
-const STYLED_ENVS = new Set(['figure', 'figure*', 'table', 'table*', 'center', 'flushleft', 'flushright', 'quote',
-    'quotation', 'abstract', 'minipage', 'verse', 'theorem', 'lemma', 'proof', 'definition', 'remark', 'example'])
+const STYLED_ENVS = new Set([
+    'figure',
+    'figure*',
+    'table',
+    'table*',
+    'center',
+    'flushleft',
+    'flushright',
+    'quote',
+    'quotation',
+    'abstract',
+    'minipage',
+    'verse',
+    'theorem',
+    'lemma',
+    'proof',
+    'definition',
+    'remark',
+    'example',
+])
 const HEADING_TAG = { chapter: 'h1', section: 'h2', subsection: 'h3', subsubsection: 'h4', paragraph: 'h5' }
 const FLOAT_LABEL = { figure: 'Figure', table: 'Table' }
 const KATEX_CACHE_LIMIT = 4000
@@ -85,13 +144,14 @@ function mathEnvTex(node, rows, labels) {
         if (node.type === 'displaymath') return { tex: body, display: true }
         return { tex: `\\begin{${name}}${body}\\end{${name}}`, display: true } // unnumbered: align*, gather*, ...
     }
-    const tag = r => r.value === null ? '' : `\\tag{${r.value}}`
+    const tag = r => (r.value === null ? '' : `\\tag{${r.value}}`)
     if (name === 'equation') return { tex: `${mathTex(node.content, labels)}${tag(rows[0])}`, display: true }
     // multline is not supported by KaTeX: lay its lines out centred and keep the number on the last one.
     const env = name === 'multline' ? 'gather' : name === 'eqnarray' ? 'align' : name
     const contentRows = name === 'multline' ? [node.content] : null
-    const texRows = (contentRows ?? splitRowsRaw(node.content)).map((row, i) =>
-        `${mathTex(row, labels)}${rows[i] ? (rows[i].value === null ? '\\notag' : tag(rows[i])) : ''}`)
+    const texRows = (contentRows ?? splitRowsRaw(node.content)).map(
+        (row, i) => `${mathTex(row, labels)}${rows[i] ? (rows[i].value === null ? '\\notag' : tag(rows[i])) : ''}`,
+    )
     const args = name === 'alignat' ? printRaw(node.args ?? []) : ''
     return { tex: `\\begin{${env}}${args}${texRows.join('\\\\')}\\end{${env}}`, display: true }
 }
@@ -145,17 +205,23 @@ export function renderChunk(chunkAst, ctx) {
             replaceNode(node, el(display ? 'div' : 'span', { class: display ? 'lp-math-d' : 'lp-math-i', 'data-katex': html }))
         },
         caption(node, kind, value) {
-            replaceNode(node, el('div', { class: 'lp-caption' },
-                [str(`${FLOAT_LABEL[kind]} ${value}: `), ...(lastArg(node)?.content ?? [])]))
+            replaceNode(
+                node,
+                el('div', { class: 'lp-caption' }, [str(`${FLOAT_LABEL[kind]} ${value}: `), ...(lastArg(node)?.content ?? [])]),
+            )
         },
         footnote(node, n) {
-            footnotes.push(el('div', { class: 'lp-footnote' }, [el('sup', {}, [str(String(n))]), str(' '), ...(lastArg(node)?.content ?? [])]))
+            footnotes.push(
+                el('div', { class: 'lp-footnote' }, [el('sup', {}, [str(String(n))]), str(' '), ...(lastArg(node)?.content ?? [])]),
+            )
             replaceNode(node, el('sup', { class: 'lp-fnref' }, [str(String(n))]))
         },
         cite(node, keys) {
             const parts = keys.map(k => ctx.citeNumbers[k] ?? '?').join(', ')
-            const note = node.args?.length > 1 && node.args[node.args.length - 2].openMark === '['
-                ? `, ${argText(node.args[node.args.length - 2])}` : ''
+            const note =
+                node.args?.length > 1 && node.args[node.args.length - 2].openMark === '['
+                    ? `, ${argText(node.args[node.args.length - 2])}`
+                    : ''
             replaceNode(node, el('span', { class: 'lp-cite' }, [str(`[${parts}${note}]`)]))
         },
         ref(node, key) {
@@ -167,7 +233,8 @@ export function renderChunk(chunkAst, ctx) {
     if (footnotes.length > 0) ast.content.push(el('div', { class: 'lp-footnotes' }, footnotes))
     const hast = unified().use(unifiedLatexToHast).runSync(ast)
     finishHast(hast)
-    return toHtml(hast, { allowDangerousHtml: true })
+    // unified 10 types its tree with @types/hast 2, hast-util-to-html 9 with @types/hast 3: same shape at runtime
+    return toHtml(/** @type {any} */ (hast), { allowDangerousHtml: true })
 }
 
 function transformMacros(nodes, ctx, inTable = false) {
@@ -233,8 +300,17 @@ function transformMacros(nodes, ctx, inTable = false) {
             const table = node.type === 'environment' ? TABLE_ENVS.has(envName(node)) : inTable
             node.content = transformMacros(node.content, ctx, table)
             if (node.type === 'environment' && !STYLED_ENVS.has(envName(node)) && !KNOWN_TO_HAST.has(envName(node))) {
-                out.push(el('div', { class: 'lp-unsupported-env', 'data-name': envName(node),
-                    title: `\\begin{${envName(node)}} is approximated by the live preview` }, approximateEnvironment(node.content)))
+                out.push(
+                    el(
+                        'div',
+                        {
+                            class: 'lp-unsupported-env',
+                            'data-name': envName(node),
+                            title: `\\begin{${envName(node)}} is approximated by the live preview`,
+                        },
+                        approximateEnvironment(node.content),
+                    ),
+                )
                 continue
             }
         }
@@ -243,22 +319,65 @@ function transformMacros(nodes, ctx, inTable = false) {
     return layoutLines(out)
 }
 
-const DECLARATIONS = { bf: 'bf', bfseries: 'bf', em: 'em', it: 'it', itshape: 'it', sl: 'it', slshape: 'it',
-    sc: 'sc', scshape: 'sc', tt: 'tt', ttfamily: 'tt', sf: 'sf', sffamily: 'sf', rm: 'rm', rmfamily: 'rm',
-    tiny: 'size-tiny', scriptsize: 'size-scriptsize', footnotesize: 'size-footnotesize', small: 'size-small',
-    normalsize: 'size-normalsize', large: 'size-large', Large: 'size-Large', LARGE: 'size-LARGE', huge: 'size-huge',
-    Huge: 'size-Huge' }
+const DECLARATIONS = {
+    bf: 'bf',
+    bfseries: 'bf',
+    em: 'em',
+    it: 'it',
+    itshape: 'it',
+    sl: 'it',
+    slshape: 'it',
+    sc: 'sc',
+    scshape: 'sc',
+    tt: 'tt',
+    ttfamily: 'tt',
+    sf: 'sf',
+    sffamily: 'sf',
+    rm: 'rm',
+    rmfamily: 'rm',
+    tiny: 'size-tiny',
+    scriptsize: 'size-scriptsize',
+    footnotesize: 'size-footnotesize',
+    small: 'size-small',
+    normalsize: 'size-normalsize',
+    large: 'size-large',
+    Large: 'size-Large',
+    LARGE: 'size-LARGE',
+    huge: 'size-huge',
+    Huge: 'size-Huge',
+}
 const ESCAPED = new Set(['&', '%', '$', '#', '_', '{', '}'])
 // \smallskip, \medskip, \bigskip at 10pt (3pt, 6pt, 12pt), in em
 const SKIPS = { smallskip: 0.3, medskip: 0.6, bigskip: 1.2 }
 // `\itemsep -3pt`: a length assignment prints nothing; its value must not show up as text
-const LENGTH_REGISTERS = new Set(['itemsep', 'parsep', 'parskip', 'topsep', 'partopsep', 'leftmargin', 'rightmargin',
-    'labelwidth', 'labelsep', 'itemindent', 'listparindent', 'parindent', 'baselineskip', 'tabcolsep', 'arraycolsep'])
+const LENGTH_REGISTERS = new Set([
+    'itemsep',
+    'parsep',
+    'parskip',
+    'topsep',
+    'partopsep',
+    'leftmargin',
+    'rightmargin',
+    'labelwidth',
+    'labelsep',
+    'itemindent',
+    'listparindent',
+    'parindent',
+    'baselineskip',
+    'tabcolsep',
+    'arraycolsep',
+])
 
 function skipDimension(nodes, i) {
     let j = i + 1
-    while (j < nodes.length && (nodes[j].type === 'whitespace'
-        || (nodes[j].type === 'string' && /^(?:[-+=.\d]+|pt|bp|em|ex|in|cm|mm|pc|sp|plus|minus|fil+|[-+=.\d]+(?:pt|bp|em|ex|in|cm|mm|pc|sp))$/.test(nodes[j].content)))) {
+    while (
+        j < nodes.length &&
+        (nodes[j].type === 'whitespace' ||
+            (nodes[j].type === 'string' &&
+                /^(?:[-+=.\d]+|pt|bp|em|ex|in|cm|mm|pc|sp|plus|minus|fil+|[-+=.\d]+(?:pt|bp|em|ex|in|cm|mm|pc|sp))$/.test(
+                    nodes[j].content,
+                )))
+    ) {
         j++
     }
     // stop before trailing whitespace so words around the assignment stay separated
@@ -280,7 +399,10 @@ function approximateEnvironment(content) {
     const items = []
     for (const node of body.slice(start)) {
         if (node.type === 'macro' && node.content === 'item') {
-            items.push({ ...node, args: [...(node.args ?? []).slice(0, -1), { type: 'argument', openMark: '', closeMark: '', content: [] }] })
+            items.push({
+                ...node,
+                args: [...(node.args ?? []).slice(0, -1), { type: 'argument', openMark: '', closeMark: '', content: [] }],
+            })
         } else {
             items[items.length - 1].args.at(-1).content.push(node)
         }
@@ -295,12 +417,15 @@ const MACRO_RENDERERS = {
     includegraphics(node, ctx) {
         const file = argText(lastArg(node))
         const options = node.args?.find(a => a.openMark === '[')
-        const width = /(?:^|,)\s*width\s*=\s*([\d.]*)\s*\\(?:textwidth|linewidth|columnwidth)/.exec(options ? printRaw(options.content) : '')
+        const width = /(?:^|,)\s*width\s*=\s*([\d.]*)\s*\\(?:textwidth|linewidth|columnwidth)/.exec(
+            options ? printRaw(options.content) : '',
+        )
         const style = width ? `width:${Math.round(parseFloat(width[1] || '1') * 100)}%` : 'max-width:100%'
         const image = ctx.resolveImage(file)
         if (!image) return el('span', { class: 'lp-missing', title: 'Image not found by the live preview' }, [str(`[image: ${file}]`)])
         if (image.pending) return el('span', { class: 'lp-missing' }, [str(`[loading image: ${file}]`)])
-        if (image.pdf) return el('span', { class: 'lp-missing', title: 'PDF graphics appear in the exported PDF' }, [str(`[PDF figure: ${file}]`)])
+        if (image.pdf)
+            return el('span', { class: 'lp-missing', title: 'PDF graphics appear in the exported PDF' }, [str(`[PDF figure: ${file}]`)])
         return el('img', { class: 'lp-img', src: image.src, style, alt: file })
     },
     maketitle(node, ctx) {
@@ -331,7 +456,7 @@ const PT_PER_UNIT = { em: 10, ex: 4.3, pt: 1, bp: 1.00375, in: 72.27, cm: 28.45,
 /** A TeX length as em of a 10pt font, or null. */
 function lengthEm(text) {
     const m = /^\s*(-?[\d.]+)\s*(em|ex|pt|bp|in|cm|mm)\s*$/.exec(text)
-    return m ? Math.round(parseFloat(m[1]) * PT_PER_UNIT[m[2]] / 10 * 1000) / 1000 : null
+    return m ? Math.round(((parseFloat(m[1]) * PT_PER_UNIT[m[2]]) / 10) * 1000) / 1000 : null
 }
 
 // \foo{...} macros the parser may leave without an attached argument (the {...} is the next group)
@@ -369,21 +494,27 @@ function renderList(node, ctx) {
     return el('div', { class: 'lp-list' }, [
         ...transformMacros(lead, ctx),
         // an empty \item[] (a class's list opener, cancelled in the PDF by \vspace) prints nothing visible
-        ...items.filter(item => printRaw(item.label).trim() || item.body.some(isVisible)).map(item => el('div', { class: 'lp-item' }, [
-            ...(printRaw(item.label).trim() ? [el('span', { class: 'lp-label' }, transformMacros(structuredClone(item.label), ctx))] : []),
-            ...transformMacros(item.body, ctx),
-        ])),
+        ...items
+            .filter(item => printRaw(item.label).trim() || item.body.some(isVisible))
+            .map(item =>
+                el('div', { class: 'lp-item' }, [
+                    ...(printRaw(item.label).trim()
+                        ? [el('span', { class: 'lp-label' }, transformMacros(structuredClone(item.label), ctx))]
+                        : []),
+                    ...transformMacros(item.body, ctx),
+                ]),
+            ),
     ])
 }
 
 /** Tag and attributes of an element node made with htmlLike (not of its html-attr: children), or null. */
-const htmlElement = node => isHtmlLikeTag(node) ? extractFromHtmlLike(node) : null
+const htmlElement = node => (isHtmlLikeTag(node) ? extractFromHtmlLike(node) : null)
 const isSpacer = node => htmlElement(node)?.attributes?.class === 'lp-vspace'
 
 /** Content that shows up on the page (not spacing, comments, anchors or layout-only commands). */
 function isVisible(node) {
     if (node.type === 'whitespace' || node.type === 'parbreak' || node.type === 'comment') return false
-    if (isHtmlLike(node)) return !['lp-a', 'lp-vspace'].includes(htmlElement(node)?.attributes?.class) // anchors, spacing
+    if (isHtmlLike(node)) return !['lp-a', 'lp-vspace'].includes(String(htmlElement(node)?.attributes?.class)) // anchors, spacing
     if (node.type === 'macro' && (IGNORED.has(node.content) || node.content === '\\')) return false
     if (node.type === 'group') return node.content.some(isVisible)
     return true
@@ -398,8 +529,8 @@ const PARBREAK = { type: 'string', content: '' }
 const parSpacer = () => el('div', { class: 'lp-par' })
 // a list, environment, display formula or other block ends an \hfill row
 const BLOCK_TAGS = new Set(['div', 'hr', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'p'])
-const isBlockNode = node => node.type === 'environment' || node.type === 'mathenv' || node.type === 'displaymath'
-    || BLOCK_TAGS.has(htmlElement(node)?.tag)
+const isBlockNode = node =>
+    node.type === 'environment' || node.type === 'mathenv' || node.type === 'displaymath' || BLOCK_TAGS.has(htmlElement(node)?.tag)
 
 /**
  * `left \hfill right \\`: a line with \hfill becomes a flex row whose fills push the parts apart, as in
@@ -423,7 +554,7 @@ function layoutLines(nodes) {
         textSinceBreak = false
         return keep
     })
-    if (!nodes.includes(FILL)) return nodes.map(n => n === BREAK ? el('br', {}) : n === PARBREAK ? parSpacer() : n)
+    if (!nodes.includes(FILL)) return nodes.map(n => (n === BREAK ? el('br', {}) : n === PARBREAK ? parSpacer() : n))
     const out = []
     let line = []
     const flush = () => {
@@ -433,8 +564,15 @@ function layoutLines(nodes) {
                 if (n === FILL) parts.push([])
                 else parts.at(-1).push(n)
             }
-            out.push(el('div', { class: 'lp-line' }, parts.flatMap((part, k) =>
-                k === 0 ? [el('span', {}, part)] : [el('span', { class: 'lp-fill' }), el('span', {}, part)])))
+            out.push(
+                el(
+                    'div',
+                    { class: 'lp-line' },
+                    parts.flatMap((part, k) =>
+                        k === 0 ? [el('span', {}, part)] : [el('span', { class: 'lp-fill' }), el('span', {}, part)],
+                    ),
+                ),
+            )
         } else {
             out.push(...line)
         }
@@ -457,26 +595,36 @@ function layoutLines(nodes) {
 }
 
 function nestedInclude(node) {
-    return el('span', { class: 'lp-unsupported', 'data-name': node.content, title: 'Only top-level \\input/\\include are expanded' },
-        [str(argText(lastArg(node)))])
+    return el('span', { class: 'lp-unsupported', 'data-name': node.content, title: 'Only top-level \\input/\\include are expanded' }, [
+        str(argText(lastArg(node))),
+    ])
 }
 
 function references(ctx) {
     const keys = Object.keys(ctx.citeNumbers).sort((a, b) => ctx.citeNumbers[a] - ctx.citeNumbers[b])
     return el('div', { class: 'lp-references' }, [
         el('h2', { class: 'lp-heading' }, [str('References')]),
-        el('ol', {}, keys.map(key => {
-            const entry = ctx.bib[key]
-            const text = entry ? [entry.author, entry.title, entry.publisher ?? entry.journal ?? entry.booktitle, entry.year]
-                .filter(Boolean).join('. ') + '.' : `${key} (not found in .bib)`
-            return el('li', { value: String(ctx.citeNumbers[key]) }, [str(text)])
-        })),
+        el(
+            'ol',
+            {},
+            keys.map(key => {
+                const entry = ctx.bib[key]
+                const text = entry
+                    ? [entry.author, entry.title, entry.publisher ?? entry.journal ?? entry.booktitle, entry.year]
+                          .filter(Boolean)
+                          .join('. ') + '.'
+                    : `${key} (not found in .bib)`
+                return el('li', { value: String(ctx.citeNumbers[key]) }, [str(text)])
+            }),
+        ),
     ])
 }
 
 const isAnchorElement = n => n.type === 'element' && n.tagName === 'span' && (n.properties?.className ?? []).includes('lp-a')
-const isInvisible = n => (n.type === 'text' && !n.value.trim()) || isAnchorElement(n)
-    || (n.type === 'element' && (n.properties?.className ?? []).includes('lp-vspace'))
+const isInvisible = n =>
+    (n.type === 'text' && !n.value.trim()) ||
+    isAnchorElement(n) ||
+    (n.type === 'element' && (n.properties?.className ?? []).includes('lp-vspace'))
 
 /**
  * A paragraph holding only spacing (\vspace on its own) is no paragraph in TeX: unwrap it, so it adds
@@ -485,7 +633,8 @@ const isInvisible = n => (n.type === 'text' && !n.value.trim()) || isAnchorEleme
 function unwrapEmptyParagraphs(node) {
     if (!node.children) return
     node.children = node.children.flatMap(child =>
-        child.type === 'element' && child.tagName === 'p' && child.children.every(isInvisible) ? child.children : [child])
+        child.type === 'element' && child.tagName === 'p' && child.children.every(isInvisible) ? child.children : [child],
+    )
     for (const child of node.children) unwrapEmptyParagraphs(child)
 }
 

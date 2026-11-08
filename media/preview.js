@@ -1,5 +1,5 @@
 // Live preview webview: keyed block reconciliation (only changed blocks touch the DOM), source<->preview sync.
-(function () {
+;(function () {
     const vscode = acquireVsCodeApi()
     const doc = document.getElementById('doc')
     const zoomLabel = document.getElementById('zoom')
@@ -22,15 +22,14 @@
     }
 
     // 'fit' (the default, like a PDF viewer's page width) or a fixed factor chosen with +/-
-    const effectiveZoom = () => state.zoom === 'fit'
-        ? Math.max(0.3, (document.documentElement.clientWidth - 24) / (page.width * 4 / 3))
-        : state.zoom
+    const effectiveZoom = () =>
+        state.zoom === 'fit' ? Math.max(0.3, (document.documentElement.clientWidth - 24) / ((page.width * 4) / 3)) : state.zoom
 
     function setZoom(zoom) {
         state.zoom = zoom === 'fit' ? 'fit' : Math.min(3, Math.max(0.3, Math.round(zoom * 100) / 100))
         const factor = effectiveZoom()
         // font-size scaling (the page is laid out in em): CSS zoom breaks caretRangeFromPoint hit tests
-        doc.style.fontSize = `${page.fontPt * 4 / 3 * factor}px`
+        doc.style.fontSize = `${((page.fontPt * 4) / 3) * factor}px`
         zoomLabel.textContent = `${Math.round(factor * 100)}%`
         vscode.setState(state)
     }
@@ -40,13 +39,19 @@
     document.getElementById('zoom-in').onclick = () => setZoom(Math.floor(effectiveZoom() * 10 + 1e-6) / 10 + 0.1)
     document.getElementById('zoom-out').onclick = () => setZoom(Math.ceil(effectiveZoom() * 10 - 1e-6) / 10 - 0.1)
     document.getElementById('zoom-fit').onclick = () => setZoom('fit')
-    window.addEventListener('resize', () => { if (state.zoom === 'fit') setZoom('fit') })
+    window.addEventListener('resize', () => {
+        if (state.zoom === 'fit') setZoom('fit')
+    })
     document.getElementById('export').onclick = () => vscode.postMessage({ type: 'export' })
-    window.addEventListener('wheel', e => {
-        if (!e.ctrlKey) return
-        e.preventDefault()
-        setZoom(effectiveZoom() - Math.sign(e.deltaY) * 0.1)
-    }, { passive: false })
+    window.addEventListener(
+        'wheel',
+        e => {
+            if (!e.ctrlKey) return
+            e.preventDefault()
+            setZoom(effectiveZoom() - Math.sign(e.deltaY) * 0.1)
+        },
+        { passive: false },
+    )
 
     function applyUpdate(msg) {
         files = msg.files
@@ -81,12 +86,14 @@
         if (msg.cursor) lastReveal = msg.cursor
         if (lastReveal) highlight(lastReveal, Boolean(msg.cursor))
         if (msg.t0) {
-            requestAnimationFrame(() => requestAnimationFrame(() => {
-                const paint = { version: msg.version, t0: msg.t0, at: Date.now() }
-                window.__lpPaints.push(paint)
-                if (window.__lpPaints.length > 10000) window.__lpPaints.shift()
-                vscode.postMessage({ type: 'painted', ...paint })
-            }))
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                    const paint = { version: msg.version, t0: msg.t0, at: Date.now() }
+                    window.__lpPaints.push(paint)
+                    if (window.__lpPaints.length > 10000) window.__lpPaints.shift()
+                    vscode.postMessage({ type: 'painted', ...paint })
+                }),
+            )
         }
     }
 
@@ -104,7 +111,9 @@
         const anchors = [...block.querySelectorAll('.lp-a')]
         const start = Number(block.dataset.line)
         let index = -1
-        anchors.forEach((a, i) => { if (start + Number(a.dataset.rl) <= line) index = i })
+        anchors.forEach((a, i) => {
+            if (start + Number(a.dataset.rl) <= line) index = i
+        })
         const range = document.createRange()
         if (index < 0) {
             range.selectNodeContents(block)

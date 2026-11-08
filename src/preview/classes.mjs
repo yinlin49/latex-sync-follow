@@ -4,9 +4,15 @@ import { htmlLike } from '@unified-latex/unified-latex-util-html-like'
 import { printRaw } from '@unified-latex/unified-latex-util-print-raw'
 
 // sizes in PostScript points (bp), like the PDF
-const PAPER = { letterpaper: [612, 792], a4paper: [595.3, 841.9], a5paper: [419.5, 595.3], b5paper: [498.9, 708.7],
-    legalpaper: [612, 1008], executivepaper: [522, 756] }
-const UNIT_BP = { bp: 1, pt: 72 / 72.27, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: 12 * 72 / 72.27 }
+const PAPER = {
+    letterpaper: [612, 792],
+    a4paper: [595.3, 841.9],
+    a5paper: [419.5, 595.3],
+    b5paper: [498.9, 708.7],
+    legalpaper: [612, 1008],
+    executivepaper: [522, 756],
+}
+const UNIT_BP = { bp: 1, pt: 72 / 72.27, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: (12 * 72) / 72.27 }
 // article's \textwidth for 10/11/12pt (TeX points); LaTeX centres the text block on the page
 const TEXT_WIDTH_PT = { 10: 345, 11: 360, 12: 390 }
 
@@ -100,12 +106,17 @@ export function classHeader(setup, preambleNodeLists) {
     }
     if (!name && addresses.length === 0) return null
     const [two, three, one] = addresses
-    const separator = () => [{ type: 'string', content: ' ' }, { type: 'inlinemath', content: [{ type: 'macro', content: 'diamond' }] },
-        { type: 'string', content: ' ' }]
+    const separator = () => [
+        { type: 'string', content: ' ' },
+        { type: 'inlinemath', content: [{ type: 'macro', content: 'diamond' }] },
+        { type: 'string', content: ' ' },
+    ]
     // inside \printaddress, \\ prints the separator instead of breaking the line
-    const line = nodes => nodes.flatMap(n => n.type === 'macro' && n.content === '\\' ? separator() : [n])
-    return [el('div', { class: 'lp-resume-header' }, [
-        el('div', { class: 'lp-resume-name' }, structuredClone(name ?? [])),
-        ...[one, two, three].filter(Boolean).map(a => el('div', { class: 'lp-resume-address' }, line(structuredClone(a)))),
-    ])]
+    const line = nodes => nodes.flatMap(n => (n.type === 'macro' && n.content === '\\' ? separator() : [n]))
+    return [
+        el('div', { class: 'lp-resume-header' }, [
+            el('div', { class: 'lp-resume-name' }, structuredClone(name ?? [])),
+            ...[one, two, three].filter(Boolean).map(a => el('div', { class: 'lp-resume-address' }, line(structuredClone(a)))),
+        ]),
+    ]
 }

@@ -5,7 +5,9 @@
 export function parseBib(text) {
     const entries = Object.create(null) // keys are user text, e.g. @misc{__proto__, ...}
     let i = 0
-    const skipSpace = () => { while (i < text.length && /\s/.test(text[i])) i++ }
+    const skipSpace = () => {
+        while (i < text.length && /\s/.test(text[i])) i++
+    }
     const readUntil = stops => {
         const start = i
         while (i < text.length && !stops.includes(text[i])) i++
@@ -18,7 +20,10 @@ export function parseBib(text) {
             let depth = 0
             const start = ++i
             for (; i < text.length; i++) {
-                if (text[i] === '\\') { i++; continue }
+                if (text[i] === '\\') {
+                    i++
+                    continue
+                }
                 if (text[i] === '{') depth++
                 else if (text[i] === '}' && depth > 0) depth--
                 else if (text[i] === close && depth === 0) break

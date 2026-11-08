@@ -1,0 +1,130 @@
+# Lint, type-check, unit tests, build and package on Linux, Windows and macOS; then end-to-end tests of
+# the packaged .vsix in a real VS Code on Linux. The release workflow calls this workflow and ships the
+# exact .vsix it tested.
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+    workflow_dispatch:
+    workflow_call:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    # a newer push to a pull request supersedes the running check; branch and release runs always finish
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+    run:
+        shell: bash
+
+jobs:
+    check:
+        name: Check (${{ matrix.os }})
+        strategy:
+            fail-fast: false
+            matrix:
+                # the extension normalizes Windows paths and spawns TeX tools: test the three platforms it runs on
+                os: [ubuntu-latest, windows-latest, macos-latest]
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 22
+                  cache: npm
+            - name: Install dependencies
+              # one retry for registry hiccups; a second failure fails the job
+              run: npm ci || { sleep 20; npm ci; }
+            - name: Lint
+              run: npm run lint
+            - name: Formatting
+              run: npm run format:check
+            - name: Build
+              run: npm run build
+            - name: Type check
+              run: npm run typecheck
+            - name: Unit and integration tests
+              run: npm test
+            - name: Package
+              run: npm run package
+            - name: Verify package
+              run: |
+                  version=$(node -p 'require("./package.json").version')
+                  node scripts/verify-vsix.mjs "latex-sync-follow-$version.vsix" --version "$version"
+            - name: Upload package
+              if: matrix.os == 'ubuntu-latest'
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: vsix
+                  path: latex-sync-follow-*.vsix
+                  if-no-files-found: error
+                  retention-days: 30
+
+    audit:
+        name: Dependency audit
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 22
+            # only runtime dependencies are bundled into the .vsix
+            - name: Audit runtime dependencies
+              run: npm audit --omit=dev --audit-level=high
+
+    e2e:
+        name: End-to-end (packaged .vsix in VS Code)
+        needs: check
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 22
+                  cache: npm
+            - name: Install dependencies
+              run: npm ci || { sleep 20; npm ci; }
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+              with:
+                  name: vsix
+                  path: package
+            - name: Install TeX Live and a virtual display
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y --no-install-recommends latexmk texlive-latex-base texlive-latex-recommended \
+                    texlive-latex-extra texlive-xetex texlive-fonts-recommended poppler-utils xvfb
+            - name: Live Preview suite
+              env:
+                  E2E_DIR: ${{ runner.temp }}/e2e-preview
+              run: |
+                  export E2E_VSIX=$(ls package/latex-sync-follow-*.vsix)
+                  xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run e2e:preview
+            - name: PDF and SyncTeX suite
+              env:
+                  E2E_DIR: ${{ runner.temp }}/e2e-synctex
+              run: |
+                  export E2E_VSIX=$(ls package/latex-sync-follow-*.vsix)
+                  xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run e2e
+            - name: Upload screenshots and VS Code logs
+              if: failure()
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: e2e-diagnostics
+                  path: |
+                      ${{ runner.temp }}/e2e-*/*.png
+                      ${{ runner.temp }}/e2e-*/user-data/logs
+                  retention-days: 7

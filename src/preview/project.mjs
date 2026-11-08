@@ -46,7 +46,10 @@ function usedNames(nodes, out = new Set()) {
 function localDefinitionFiles(node, rootDir) {
     if (node.type !== 'macro' || !node.args) return []
     if (node.content === 'documentclass') return [path.resolve(rootDir, `${argText(lastArg(node))}.cls`)]
-    if (node.content === 'usepackage') return argText(lastArg(node)).split(',').map(p => path.resolve(rootDir, `${p.trim()}.sty`))
+    if (node.content === 'usepackage')
+        return argText(lastArg(node))
+            .split(',')
+            .map(p => path.resolve(rootDir, `${p.trim()}.sty`))
     return []
 }
 
@@ -80,7 +83,7 @@ export class LivePreviewModel {
         this.factsByAst = new WeakMap() // entries go away with the parse cache's ASTs
     }
 
-    /** @returns {{blocks: {id, key, file, line, endLine, html?}[], files: string[], stats: object}} */
+    /** @returns {{blocks: {id, key, file, line, endLine, html?}[], files: string[], page: object, stats: object}} */
     update(rootFile) {
         const started = performance.now()
         const parsesBefore = this.parser.parses
@@ -122,7 +125,10 @@ export class LivePreviewModel {
     /** Content the document class prints by itself at \begin{document}, as a block mapped to the root's preamble. */
     headerSegment(rootFile, setup, preamble) {
         const own = preamble.filter(c => c.file === rootFile)
-        const nodes = classHeader(setup, own.map(c => c.ast.content))
+        const nodes = classHeader(
+            setup,
+            own.map(c => c.ast.content),
+        )
         if (!nodes) return null
         const text = printRaw(nodes)
         // a stable root object per header text keeps the per-AST caches (facts, expansions) warm
@@ -131,7 +137,15 @@ export class LivePreviewModel {
         const ast = this.headerAsts.get(text)
         const first = own.find(c => c.ast.content.some(n => n.type === 'macro' && (n.content === 'name' || n.content === 'address')))
         const last = own.findLast(c => c.ast.content.some(n => n.type === 'macro' && n.content === 'address')) ?? first
-        return { file: rootFile, text, index: 'header', ast, nodes: ast.content, startLine: first?.startLine ?? 0, endLine: last?.endLine ?? 0 }
+        return {
+            file: rootFile,
+            text,
+            index: 'header',
+            ast,
+            nodes: ast.content,
+            startLine: first?.startLine ?? 0,
+            endLine: last?.endLine ?? 0,
+        }
     }
 
     /**
@@ -211,21 +225,30 @@ export class LivePreviewModel {
     /** Facts about a segment that do not depend on counters, cached per parsed chunk until it changes. */
     segmentFacts(ast, index, nodes) {
         let byIndex = this.factsByAst.get(ast)
-        if (!byIndex) this.factsByAst.set(ast, byIndex = new Map())
+        if (!byIndex) this.factsByAst.set(ast, (byIndex = new Map()))
         let facts = byIndex.get(index)
         if (!facts) {
-            const defs = [...listNewcommands({ type: 'root', content: nodes }), ...simpleDefs(nodes)]
-                .filter(d => !usesInternals([d.body].flat()))
+            const defs = [...listNewcommands({ type: 'root', content: nodes }), ...simpleDefs(nodes)].filter(
+                d => !usesInternals([d.body].flat()),
+            )
             facts = {
-                defs, envs: environmentDefs(nodes), title: {}, images: imageNames(nodes),
-                macros: usedNames(nodes), maketitle: false, bibNames: null,
+                defs,
+                envs: environmentDefs(nodes),
+                title: {},
+                images: imageNames(nodes),
+                macros: usedNames(nodes),
+                maketitle: false,
+                bibNames: null,
             }
             for (const node of nodes) {
                 if (node.type !== 'macro') continue
                 if (TITLE_MACROS.includes(node.content)) facts.title[node.content] = lastArg(node)?.content
                 if (node.content === 'maketitle') facts.maketitle = true
                 if (node.content === 'bibliography' || node.content === 'printbibliography') {
-                    facts.bibNames = argText(lastArg(node)).split(',').map(s => s.trim()).filter(Boolean)
+                    facts.bibNames = argText(lastArg(node))
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(Boolean)
                 }
             }
             byIndex.set(index, facts)
@@ -246,10 +269,15 @@ export class LivePreviewModel {
         for (const chunk of preamble) addFacts(this.segmentFacts(chunk.ast, 'preamble', chunk.ast.content))
         const bodyFacts = segments.map(seg => seg.nodes && this.segmentFacts(seg.ast, seg.index, seg.nodes))
         bodyFacts.forEach(facts => facts && addFacts(facts))
-        const defsKey = defs.length + envs.size > 0 ? hash(JSON.stringify([
-            defs.map(d => [d.name, d.signature, printRaw(d.body)]),
-            [...envs].map(([name, e]) => [name, e.nargs, printRaw(e.begin), printRaw(e.end)]),
-        ])) : ''
+        const defsKey =
+            defs.length + envs.size > 0
+                ? hash(
+                      JSON.stringify([
+                          defs.map(d => [d.name, d.signature, printRaw(d.body)]),
+                          [...envs].map(([name, e]) => [name, e.nargs, printRaw(e.begin), printRaw(e.end)]),
+                      ]),
+                  )
+                : ''
         // names a block may use that the document defines: macros, and environments as "env:name"
         const defNames = new Set([...defs.map(d => d.name), ...[...envs.keys()].map(name => `env:${name}`)])
         // keys are user text (\label{constructor}, @book{__proto__}): no inherited properties
@@ -267,11 +295,14 @@ export class LivePreviewModel {
             const flags = new Set()
             // count on the macro-expanded text, exactly as renderChunk does (\newcommand{\sec}[1]{\section{#1}})
             walk(this.expandedNodes(seg, facts, { defs, envs, defNames, defsKey }), st, {
-                label: (node, key, value) => { labels[key] = value ?? '??' },
-                cite: (node, keys) => keys.forEach(k => {
-                    cites.add(k)
-                    citeNumbers[k] ??= Object.keys(citeNumbers).length + 1
-                }),
+                label: (node, key, value) => {
+                    labels[key] = value ?? '??'
+                },
+                cite: (node, keys) =>
+                    keys.forEach(k => {
+                        cites.add(k)
+                        citeNumbers[k] ??= Object.keys(citeNumbers).length + 1
+                    }),
                 ref: (node, key) => refs.add(key),
                 math: node => mathRefs(node.content, refs),
             })
@@ -282,8 +313,12 @@ export class LivePreviewModel {
             }
             perSegment.push({ seg, facts, start, end: { ...st }, refs, cites, flags })
         })
-        const bib = Object.assign(Object.create(null), ...bibNames.map(name =>
-            parseBib(this.host.readText(path.resolve(rootDir, name.endsWith('.bib') ? name : `${name}.bib`)) ?? '')))
+        const bib = Object.assign(
+            Object.create(null),
+            ...bibNames.map(name =>
+                parseBib(this.host.readText(path.resolve(rootDir, name.endsWith('.bib') ? name : `${name}.bib`)) ?? ''),
+            ),
+        )
         const titleKey = JSON.stringify(Object.entries(title).map(([k, v]) => [k, printRaw(v ?? [])]))
         for (const { seg, facts, start, end, refs, cites, flags } of perSegment) {
             // Only what this block depends on goes into its cache key, so editing one paragraph does not
@@ -320,28 +355,39 @@ export class LivePreviewModel {
     renderSegment(seg, analysis, rootDir) {
         if (seg.missing) return seg.html
         try {
-            const html = renderChunk({ type: 'root', content: seg.nodes }, {
-                counters: seg.counters,
-                labels: analysis.labels,
-                citeNumbers: analysis.citeNumbers,
-                bib: analysis.bib,
-                defs: analysis.defs,
-                envs: analysis.envs,
-                title: analysis.title,
-                resolveImage: name => this.host.resolveImage(rootDir, name),
-            })
+            const html = renderChunk(
+                { type: 'root', content: seg.nodes },
+                {
+                    counters: seg.counters,
+                    labels: analysis.labels,
+                    citeNumbers: analysis.citeNumbers,
+                    bib: analysis.bib,
+                    defs: analysis.defs,
+                    envs: analysis.envs,
+                    title: analysis.title,
+                    resolveImage: name => this.host.resolveImage(rootDir, name),
+                },
+            )
             return seg.ast.parseError ? `${html}<div class="lp-error">Parse error: ${escapeHtml(seg.ast.parseError)}</div>` : html
         } catch (e) {
             // One broken block must not blank the preview: show its source with the error.
-            return `<div class="lp-error">Live preview could not render this block: ${escapeHtml(String(e.message))}</div>` +
+            return (
+                `<div class="lp-error">Live preview could not render this block: ${escapeHtml(String(e.message))}</div>` +
                 `<pre class="lp-source">${escapeHtml(seg.text)}</pre>`
+            )
         }
     }
 }
 
 function missingSegment(file) {
     return {
-        file, text: '', index: 0, startLine: 0, endLine: 0, missing: true, context: { missing: true },
+        file,
+        text: '',
+        index: 0,
+        startLine: 0,
+        endLine: 0,
+        missing: true,
+        context: { missing: true },
         html: `<div class="lp-error">File not found: ${escapeHtml(file)}</div>`,
     }
 }

@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "target": "es2022",
+        "checkJs": true,
+        "allowJs": true,
+        "noEmit": true,
+        "strict": false,
+        "skipLibCheck": true,
+        "maxNodeModuleJsDepth": 0,
+        "types": ["node", "vscode"]
+    },
+    "include": ["extension.js", "preview.js", "lib/**/*.js", "src/**/*.mjs", "build.mjs"]
+}

@@ -39,7 +39,10 @@ function activate(context) {
         watcher,
         watcher.onDidCreate(loadFdb),
         watcher.onDidChange(loadFdb),
-        watcher.onDidDelete(uri => { compiledByFdb.delete(uri.toString()); void refreshStatus() }),
+        watcher.onDidDelete(uri => {
+            compiledByFdb.delete(uri.toString())
+            void refreshStatus()
+        }),
         vscode.commands.registerCommand('latexSyncFollow.toggle', toggleFollow),
         vscode.window.onDidChangeTextEditorSelection(onSelectionChange),
         vscode.window.onDidChangeActiveTextEditor(() => void refreshStatus()),
@@ -51,9 +54,10 @@ function activate(context) {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('latexSyncFollow')) void refreshStatus()
         }),
-        { dispose: () => clearTimeout(followTimer) }
+        { dispose: () => clearTimeout(followTimer) },
     )
-    void vscode.workspace.findFiles('**/*.fdb_latexmk')
+    void vscode.workspace
+        .findFiles('**/*.fdb_latexmk')
         .then(uris => Promise.all(uris.map(loadFdb)))
         .then(refreshStatus)
     activatePreview(context, log, isLatex)
@@ -91,8 +95,9 @@ async function loadFdb(uri) {
         // LW skips the viewer refresh on failed builds, yet latexmk already wrote the new PDF and
         // SyncTeX; reload so the viewer shows the PDF that the SyncTeX data describes.
         log.info(`compile had errors, refreshing viewer: ${base}`)
-        await Promise.resolve(vscode.commands.executeCommand('latex-workshop.refresh-viewer'))
-            .catch(e => log.warn(`refresh-viewer failed: ${e.message}`))
+        await Promise.resolve(vscode.commands.executeCommand('latex-workshop.refresh-viewer')).catch(e =>
+            log.warn(`refresh-viewer failed: ${e.message}`),
+        )
     }
     await refreshStatus()
 }
@@ -103,7 +108,10 @@ async function syncedPdfNames(document) {
     const key = normalizePath(document.uri.fsPath)
     const candidates = [...compiledByFdb.values()].filter(c => c.md5ByPath.has(key))
     if (candidates.length === 0) return []
-    const onDisk = crypto.createHash('md5').update(await fs.readFile(document.uri.fsPath)).digest('hex')
+    const onDisk = crypto
+        .createHash('md5')
+        .update(await fs.readFile(document.uri.fsPath))
+        .digest('hex')
     return candidates.filter(c => c.md5ByPath.get(key) === onDisk).map(c => c.pdfName)
 }
 
@@ -119,8 +127,9 @@ function openPdfTabNames() {
     // LW's synctex command opens a new viewer when none exists; never do that from a cursor move.
     // The viewer is a webview panel or, when opened on a .pdf, the custom editor 'latex-workshop-pdf-hook';
     // both are titled with the PDF's file name.
-    return vscode.window.tabGroups.all.flatMap(group => group.tabs)
-        .filter(tab => tab.input?.viewType?.includes(PDF_VIEW_TYPE))
+    return vscode.window.tabGroups.all
+        .flatMap(group => group.tabs)
+        .filter(tab => /** @type {{ viewType?: string } | undefined} */ (tab.input)?.viewType?.includes(PDF_VIEW_TYPE))
         .map(tab => tab.label)
 }
 
@@ -155,8 +164,7 @@ async function followCursor(editor, kind) {
 }
 
 async function toggleFollow() {
-    await vscode.workspace.getConfiguration('latexSyncFollow')
-        .update('enabled', !followEnabled(), vscode.ConfigurationTarget.Global)
+    await vscode.workspace.getConfiguration('latexSyncFollow').update('enabled', !followEnabled(), vscode.ConfigurationTarget.Global)
 }
 
 async function refreshStatus() {
@@ -177,8 +185,9 @@ async function refreshStatus() {
         status.tooltip = 'PDF matches this file. Moving the cursor scrolls the PDF. Click to turn off.'
     } else {
         status.text = '$(warning) SyncTeX: PDF out of date'
-        status.tooltip = 'This file differs from the last compile (unsaved, compiling, or not compiled yet). '
-            + 'Cursor → PDF is paused; PDF → source jumps use the old line numbers until the next compile.'
+        status.tooltip =
+            'This file differs from the last compile (unsaved, compiling, or not compiled yet). ' +
+            'Cursor → PDF is paused; PDF → source jumps use the old line numbers until the next compile.'
     }
     status.show()
 }

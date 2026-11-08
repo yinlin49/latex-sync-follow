@@ -1,6 +1,9 @@
 node_modules/
-# build output: npm run build
-dist/
+# build output: npm run build (the type declaration is source)
+dist/*
+!dist/renderer.d.ts
 media/katex/
 *.vsix
+*.sha256
 *.tmp*
+.vscode-test/

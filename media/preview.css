@@ -42,8 +42,13 @@ body {
     background: var(--vscode-button-secondaryBackground, #ddd);
 }
 
-#zoom { min-width: 3em; text-align: center; }
-#toolbar .spacer { flex: 1; }
+#zoom {
+    min-width: 3em;
+    text-align: center;
+}
+#toolbar .spacer {
+    flex: 1;
+}
 
 /* The page: paper width, margins and base font size come from the document (class options, geometry);
    preview.js sets them in em of the base font, so zoom (font-size) scales the whole page like the PDF. */
@@ -55,7 +60,7 @@ body {
     background: var(--lp-paper);
     color: var(--lp-ink);
     /* KaTeX_Main is Computer Modern, LaTeX's default font (KaTeX's own CSS loads it) */
-    font-family: KaTeX_Main, "Latin Modern Roman", "CMU Serif", "Times New Roman", serif;
+    font-family: KaTeX_Main, 'Latin Modern Roman', 'CMU Serif', 'Times New Roman', serif;
     font-size: 13.333px;
     line-height: 1.2;
     text-align: justify;
@@ -72,83 +77,250 @@ body {
     content-visibility: auto;
     contain-intrinsic-size: auto 3em;
 }
-::highlight(lp-line) { background-color: var(--lp-line); }
-.lp-a { display: inline; }
-#doc p { margin: 0 0 0.6em; }
-.lp-vspace { height: 0; }
-.lp-par { height: 0; margin-top: 0.6em; }
+::highlight(lp-line) {
+    background-color: var(--lp-line);
+}
+.lp-a {
+    display: inline;
+}
+#doc p {
+    margin: 0 0 0.6em;
+}
+.lp-vspace {
+    height: 0;
+}
+.lp-par {
+    height: 0;
+    margin-top: 0.6em;
+}
 /* between \items TeX subtracts a negative \vspace from \itemsep + \parsep, which <li>s here do not have */
-#doc li .lp-vspace { margin-top: 0 !important; }
-#doc a { color: #0000ee; text-decoration: none; }
+#doc li .lp-vspace {
+    margin-top: 0 !important;
+}
+#doc a {
+    color: #0000ee;
+    text-decoration: none;
+}
 
 /* article sizes at 10pt: \section is \Large, \subsection \large */
-.lp-heading { font-weight: bold; margin: 1.2em 0 0.6em; text-align: left; }
-h1.lp-heading { font-size: 2.074em; }
-h2.lp-heading { font-size: 1.44em; }
-h3.lp-heading { font-size: 1.2em; }
-h4.lp-heading { font-size: 1em; }
-.lp-num { margin-right: 1em; }
+.lp-heading {
+    font-weight: bold;
+    margin: 1.2em 0 0.6em;
+    text-align: left;
+}
+h1.lp-heading {
+    font-size: 2.074em;
+}
+h2.lp-heading {
+    font-size: 1.44em;
+}
+h3.lp-heading {
+    font-size: 1.2em;
+}
+h4.lp-heading {
+    font-size: 1em;
+}
+.lp-num {
+    margin-right: 1em;
+}
 
 /* \hfill lines (left part, fill, right part), \hrule, list environments */
-.lp-line { display: flex; align-items: baseline; text-align: left; }
-.lp-fill { flex: 1; }
-.lp-hspace { display: inline-block; }
-.lp-hrule { border: 0; border-top: 0.04em solid var(--lp-ink); margin: 0.2em 0 0.35em; }
-.lp-upper { text-transform: uppercase; }
-.lp-lower { text-transform: lowercase; }
-.lp-center { text-align: center; }
-.lp-list { margin: 0; }
-.lp-item { margin: 0 0 0.2em; }
-.lp-label { margin-right: 0.4em; }
+.lp-line {
+    display: flex;
+    align-items: baseline;
+    text-align: left;
+}
+.lp-fill {
+    flex: 1;
+}
+.lp-hspace {
+    display: inline-block;
+}
+.lp-hrule {
+    border: 0;
+    border-top: 0.04em solid var(--lp-ink);
+    margin: 0.2em 0 0.35em;
+}
+.lp-upper {
+    text-transform: uppercase;
+}
+.lp-lower {
+    text-transform: lowercase;
+}
+.lp-center {
+    text-align: center;
+}
+.lp-list {
+    margin: 0;
+}
+.lp-item {
+    margin: 0 0 0.2em;
+}
+.lp-label {
+    margin-right: 0.4em;
+}
 /* itemize: \leftmargini = 2.5em, the bullet hangs to the left of the text */
-#doc ul.itemize, #doc ol.enumerate { margin: 0.15em 0; padding-left: 2.5em; }
-#doc ul.itemize > li { list-style: disc; margin: 0; }
-#doc ul.itemize ul.itemize > li { list-style: "– "; }
-#doc li > p { margin: 0; }
+#doc ul.itemize,
+#doc ol.enumerate {
+    margin: 0.15em 0;
+    padding-left: 2.5em;
+}
+#doc ul.itemize > li {
+    list-style: disc;
+    margin: 0;
+}
+#doc ul.itemize ul.itemize > li {
+    list-style: '– ';
+}
+#doc li > p {
+    margin: 0;
+}
 
 /* resume.cls header: \name in \LARGE bold capitals, address lines centred */
-.lp-resume-header { text-align: center; margin-bottom: 0.4em; }
-.lp-resume-name { font-size: 1.728em; font-weight: bold; text-transform: uppercase; margin-bottom: 0.35em; }
-.lp-resume-address { margin-bottom: 0.15em; }
+.lp-resume-header {
+    text-align: center;
+    margin-bottom: 0.4em;
+}
+.lp-resume-name {
+    font-size: 1.728em;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 0.35em;
+}
+.lp-resume-address {
+    margin-bottom: 0.15em;
+}
 
 /* LaTeX size commands at 10pt */
-.lp-size-tiny { font-size: 0.5em; }
-.lp-size-scriptsize { font-size: 0.7em; }
-.lp-size-footnotesize { font-size: 0.8em; }
-.lp-size-small { font-size: 0.9em; }
-.lp-size-normalsize { font-size: 1em; }
-.lp-size-large { font-size: 1.2em; }
-.lp-size-Large { font-size: 1.44em; }
-.lp-size-LARGE { font-size: 1.728em; }
-.lp-size-huge { font-size: 2.074em; }
-.lp-size-Huge { font-size: 2.488em; }
+.lp-size-tiny {
+    font-size: 0.5em;
+}
+.lp-size-scriptsize {
+    font-size: 0.7em;
+}
+.lp-size-footnotesize {
+    font-size: 0.8em;
+}
+.lp-size-small {
+    font-size: 0.9em;
+}
+.lp-size-normalsize {
+    font-size: 1em;
+}
+.lp-size-large {
+    font-size: 1.2em;
+}
+.lp-size-Large {
+    font-size: 1.44em;
+}
+.lp-size-LARGE {
+    font-size: 1.728em;
+}
+.lp-size-huge {
+    font-size: 2.074em;
+}
+.lp-size-Huge {
+    font-size: 2.488em;
+}
 
-.lp-title { text-align: center; margin: 1em 0 1.5em; }
-.lp-title h1 { font-size: 1.8em; font-weight: normal; margin: 0 0 0.4em; }
-.lp-author, .lp-date { font-size: 1.1em; }
+.lp-title {
+    text-align: center;
+    margin: 1em 0 1.5em;
+}
+.lp-title h1 {
+    font-size: 1.8em;
+    font-weight: normal;
+    margin: 0 0 0.4em;
+}
+.lp-author,
+.lp-date {
+    font-size: 1.1em;
+}
 
-.lp-math-d { margin: 0.6em 0; overflow-x: auto; overflow-y: hidden; }
-.katex-display { margin: 0; }
+.lp-math-d {
+    margin: 0.6em 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+.katex-display {
+    margin: 0;
+}
 
-.environment.figure, .environment.table, .environment.center, .lp-figure { text-align: center; margin: 1em 0; }
-.lp-caption { margin-top: 0.4em; font-size: 0.95em; }
-.lp-img { display: inline-block; height: auto; }
-table.tabular { margin: 0.4em auto; border-collapse: collapse; border-top: 1.5px solid var(--lp-ink); border-bottom: 1.5px solid var(--lp-ink); }
-table.tabular td { padding: 2px 10px; }
+.environment.figure,
+.environment.table,
+.environment.center,
+.lp-figure {
+    text-align: center;
+    margin: 1em 0;
+}
+.lp-caption {
+    margin-top: 0.4em;
+    font-size: 0.95em;
+}
+.lp-img {
+    display: inline-block;
+    height: auto;
+}
+table.tabular {
+    margin: 0.4em auto;
+    border-collapse: collapse;
+    border-top: 1.5px solid var(--lp-ink);
+    border-bottom: 1.5px solid var(--lp-ink);
+}
+table.tabular td {
+    padding: 2px 10px;
+}
 
-.environment.abstract { margin: 1em 3em; font-size: 0.95em; }
-.environment.abstract::before { content: "Abstract"; display: block; text-align: center; font-weight: bold; }
-.environment.quote, .environment.quotation { margin: 0.6em 2.5em; }
-.lp-bf { font-weight: bold; }
-.lp-em, .lp-it { font-style: italic; }
-.lp-sc { font-variant: small-caps; }
-.lp-tt { font-family: var(--vscode-editor-font-family, monospace); }
-.lp-sf { font-family: sans-serif; }
-.lp-rm { font-family: inherit; font-style: normal; font-weight: normal; }
-.lp-env-title { font-weight: bold; font-variant: small-caps; font-size: 1.1em; margin-bottom: 0.2em; }
+.environment.abstract {
+    margin: 1em 3em;
+    font-size: 0.95em;
+}
+.environment.abstract::before {
+    content: 'Abstract';
+    display: block;
+    text-align: center;
+    font-weight: bold;
+}
+.environment.quote,
+.environment.quotation {
+    margin: 0.6em 2.5em;
+}
+.lp-bf {
+    font-weight: bold;
+}
+.lp-em,
+.lp-it {
+    font-style: italic;
+}
+.lp-sc {
+    font-variant: small-caps;
+}
+.lp-tt {
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+.lp-sf {
+    font-family: sans-serif;
+}
+.lp-rm {
+    font-family: inherit;
+    font-style: normal;
+    font-weight: normal;
+}
+.lp-env-title {
+    font-weight: bold;
+    font-variant: small-caps;
+    font-size: 1.1em;
+    margin-bottom: 0.2em;
+}
 
-.lp-footnotes { margin-top: 0.4em; border-top: 1px solid #ccc; font-size: 0.85em; }
-.lp-references ol { padding-left: 2.2em; }
+.lp-footnotes {
+    margin-top: 0.4em;
+    border-top: 1px solid #ccc;
+    font-size: 0.85em;
+}
+.lp-references ol {
+    padding-left: 2.2em;
+}
 
 /* Content the live preview cannot render exactly: visible, never silently dropped. */
 .lp-unsupported {
@@ -158,16 +330,36 @@ table.tabular td { padding: 2px 10px; }
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 0.85em;
 }
-.lp-unsupported::before { content: "\\" attr(data-name); }
-.lp-unsupported .argument::before { content: attr(data-open-mark); }
-.lp-unsupported .argument::after { content: attr(data-close-mark); }
-.lp-unsupported-env { border-left: 3px solid var(--lp-warn); padding-left: 8px; }
+.lp-unsupported::before {
+    content: '\\' attr(data-name);
+}
+.lp-unsupported .argument::before {
+    content: attr(data-open-mark);
+}
+.lp-unsupported .argument::after {
+    content: attr(data-close-mark);
+}
+.lp-unsupported-env {
+    border-left: 3px solid var(--lp-warn);
+    padding-left: 8px;
+}
 .lp-unsupported-env::before {
-    content: "approximate: " attr(data-name);
+    content: 'approximate: ' attr(data-name);
     display: block;
     color: var(--lp-warn);
     font: 0.75em var(--vscode-editor-font-family, monospace);
 }
-.lp-missing { color: var(--lp-warn); font-family: var(--vscode-editor-font-family, monospace); font-size: 0.85em; }
-.lp-error { color: var(--lp-error); font: 0.85em var(--vscode-editor-font-family, monospace); }
-.lp-source { white-space: pre-wrap; font-size: 0.8em; color: var(--lp-muted); }
+.lp-missing {
+    color: var(--lp-warn);
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 0.85em;
+}
+.lp-error {
+    color: var(--lp-error);
+    font: 0.85em var(--vscode-editor-font-family, monospace);
+}
+.lp-source {
+    white-space: pre-wrap;
+    font-size: 0.8em;
+    color: var(--lp-muted);
+}
