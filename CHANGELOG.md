@@ -4,6 +4,8 @@ All notable changes to this extension. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-08
+
 ### Fixed
 
 - Clicking text in the preview mapped every `\item` of a list (and text inside `\textbf`, `\emph`, section titles and captions) to the line where the list or block starts. Every word now carries its source line and column: a click jumps to that line, selects the clicked word, and briefly highlights the line. A cursor on a source line highlights exactly that line's content in the preview (one `\item`, not the whole list).
