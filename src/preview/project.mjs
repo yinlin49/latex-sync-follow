@@ -198,10 +198,9 @@ export class LivePreviewModel {
     /** Preamble chunks (definitions, \title), following \input/\include of macro files. */
     collectPreamble(lines, to, file, rootDir, chain, files, preamble) {
         for (const chunk of splitChunks(lines, 0, to, this.parser)) {
-            preamble.push({ ...chunk, file })
+            // a class or package file in the project (resume.cls) is read for its definitions, ahead of the
+            // chunk loading it: the document's own \renewcommand after \documentclass must win
             for (const node of chunk.ast.content) {
-                const target = includeTarget(node)
-                // a class or package file in the project (resume.cls) is read for its definitions
                 for (const local of localDefinitionFiles(node, rootDir)) {
                     if (chain.includes(local)) continue
                     const text = this.host.readText(local)
@@ -210,6 +209,10 @@ export class LivePreviewModel {
                     const sub = text.split(/\r?\n/)
                     this.collectPreamble(sub, sub.length, local, rootDir, [...chain, local], files, preamble)
                 }
+            }
+            preamble.push({ ...chunk, file })
+            for (const node of chunk.ast.content) {
+                const target = includeTarget(node)
                 if (target === null) continue
                 const included = texPath(rootDir, target)
                 if (chain.includes(included) || chain.length > MAX_INCLUDE_DEPTH) continue

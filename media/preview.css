@@ -3,6 +3,7 @@
     --lp-ink: #1a1a1a;
     --lp-muted: #6b6b6b;
     --lp-line: rgba(255, 213, 0, 0.28);
+    --lp-hover: rgba(0, 120, 215, 0.16);
     --lp-warn: #a15c00;
     --lp-error: #b00020;
 }
@@ -80,6 +81,9 @@ body {
 ::highlight(lp-line) {
     background-color: var(--lp-line);
 }
+::highlight(lp-hover) {
+    background-color: var(--lp-hover);
+}
 .lp-a {
     display: inline;
 }
@@ -91,14 +95,14 @@ body {
 }
 .lp-par {
     height: 0;
-    margin-top: 0.6em;
+    margin-top: var(--lp-parskip, 0.6em);
 }
 /* between \items TeX subtracts a negative \vspace from \itemsep + \parsep, which <li>s here do not have */
 #doc li .lp-vspace {
     margin-top: 0 !important;
 }
 #doc a {
-    color: #0000ee;
+    color: var(--lp-url, #0000ee);
     text-decoration: none;
 }
 
@@ -139,7 +143,8 @@ h4.lp-heading {
 .lp-hrule {
     border: 0;
     border-top: 0.04em solid var(--lp-ink);
-    margin: 0.2em 0 0.35em;
+    /* \hrule adds no space above: the line box's descent already stands for the depth of the text */
+    margin: 0 0 0.35em;
 }
 .lp-upper {
     text-transform: uppercase;
@@ -261,14 +266,28 @@ h4.lp-heading {
     display: inline-block;
     height: auto;
 }
+/* a tabular sits at the left margin like a big letter; centred only inside a centring environment */
 table.tabular {
-    margin: 0.4em auto;
+    margin: 0;
     border-collapse: collapse;
+}
+:is(.environment.figure, .environment.table, .environment.center, .lp-figure, .lp-center) table.tabular {
+    margin: 0.4em auto;
+}
+/* rules only when the source draws them (\hline, \toprule, ...) */
+.lp-ruled > table.tabular {
     border-top: 1.5px solid var(--lp-ink);
     border-bottom: 1.5px solid var(--lp-ink);
 }
+/* \tabcolsep = 6pt on each side of a column; @{} removes it at the table's edge */
 table.tabular td {
-    padding: 2px 10px;
+    padding: 0 0.6em;
+}
+.lp-flush-left td:first-child {
+    padding-left: 0;
+}
+.lp-flush-right td:last-child {
+    padding-right: 0;
 }
 
 .environment.abstract {

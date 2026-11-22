@@ -54,6 +54,11 @@ const IGNORED = new Set([
     'raggedleft',
     'par',
     'relax',
+    'begingroup',
+    'endgroup',
+    'ignorespaces',
+    'fontsize',
+    'selectfont',
     'nonumber',
     'notag',
     'title',
@@ -132,8 +137,28 @@ function mathTex(nodes, labels) {
 /** Expands the document's \newcommand macros in place (shared by analysis and rendering). */
 export function expandUserMacros(ast, defs) {
     if (defs.length === 0) return
+    const names = new Set(defs.map(d => d.name))
+    // a body may call another user macro (\cventry -> \cvrow): expand until none is left (bounded: \x -> \x)
+    for (let depth = 0; depth < MAX_EXPANSION_DEPTH && callsAny(ast.content, names); depth++) {
+        attachUserMacroArgs(ast, defs)
+        expandMacrosExcludingDefinitions(ast, defs)
+    }
+}
+
+const MAX_EXPANSION_DEPTH = 8
+const DEFINERS = new Set(['newcommand', 'renewcommand', 'providecommand'])
+
+function attachUserMacroArgs(ast, defs) {
     attachMacroArgs(ast, Object.fromEntries(defs.map(d => [d.name, { signature: d.signature }])))
-    expandMacrosExcludingDefinitions(ast, defs)
+}
+
+/** True when `nodes` call one of `names` outside a \newcommand definition. */
+function callsAny(nodes, names) {
+    return nodes.some(n =>
+        n.type === 'macro'
+            ? names.has(n.content) || (!DEFINERS.has(n.content) && (n.args ?? []).some(a => callsAny(a.content, names)))
+            : Array.isArray(n.content) && callsAny(n.content, names),
+    )
 }
 
 function mathEnvTex(node, rows, labels) {
@@ -171,7 +196,7 @@ function splitRowsRaw(nodes) {
  * \item. A click maps to the anchor just before the caret (the word under it); a source line maps to the
  * content between its anchors.
  */
-function insertAnchors(nodes) {
+function insertAnchors(nodes, userMacros) {
     const out = []
     let previous
     for (const node of nodes) {
@@ -184,11 +209,12 @@ function insertAnchors(nodes) {
         }
         // math, verbatim and comments are other node types: their content is never touched
         if (node.type === 'environment' || node.type === 'group') {
-            node.content = insertAnchors(node.content)
+            node.content = insertAnchors(node.content, userMacros)
         } else if (node.type === 'macro' && node.args?.length && !NO_TEXT_ARGS.has(node.content) && !isHtmlLike(node)) {
-            // the text of \item, \textbf{...}, \section{...}, \caption{...}: the last argument
-            const text = node.args[node.args.length - 1]
-            text.content = insertAnchors(text.content)
+            // the text of \item, \textbf{...}, \section{...}, \caption{...}: the last argument; a user
+            // macro may print every argument (\cvrow{role}{dates})
+            const texts = userMacros.has(node.content) ? node.args : [node.args[node.args.length - 1]]
+            for (const text of texts) text.content = insertAnchors(text.content, userMacros)
         }
         out.push(node)
     }
@@ -235,7 +261,26 @@ const NO_TEXT_ARGS = new Set([
     'end',
     'tag',
     'hypersetup',
+    'fontsize',
 ])
+
+/**
+ * A user macro's #n carries its anchors into the body, maybe into a URL or colour (\href{#1}): keep them
+ * only where insertAnchors puts them, the last argument of a macro that prints text.
+ */
+function stripArgumentAnchors(nodes) {
+    for (const node of nodes) {
+        if (isHtmlLike(node)) continue
+        if (Array.isArray(node.content)) stripArgumentAnchors(node.content)
+        const args = node.type === 'macro' ? (node.args ?? []) : []
+        args.forEach((arg, k) => {
+            if (NO_TEXT_ARGS.has(node.content) || k < args.length - 1) {
+                arg.content = arg.content.filter(n => htmlElement(n)?.attributes?.class !== 'lp-a')
+            }
+            stripArgumentAnchors(arg.content)
+        })
+    }
+}
 
 function hasOwnAnchor(node) {
     if (node.type === 'whitespace' || node.type === 'parbreak' || node.type === 'comment') return false
@@ -250,9 +295,13 @@ function hasOwnAnchor(node) {
  */
 export function renderChunk(chunkAst, ctx) {
     const ast = structuredClone(chunkAst)
-    ast.content = insertAnchors(ast.content)
+    // arguments first: an anchor between \cvrow and its {groups} would otherwise be taken as #1
+    attachUserMacroArgs(ast, ctx.defs)
+    attachMacroArgs(ast, { fontsize: { signature: 'm m' } }) // \fontsize{size}{skip}: not text, dropped
+    ast.content = insertAnchors(ast.content, new Set(ctx.defs.map(d => d.name)))
     ast.content = expandEnvironments(ast.content, ctx.envs ?? new Map())
     expandUserMacros(ast, ctx.defs)
+    stripArgumentAnchors(ast.content)
     const footnotes = []
     const st = { ...ctx.counters }
     walk(ast.content, st, {
@@ -317,6 +366,10 @@ function transformMacros(nodes, ctx, inTable = false) {
                 out.push(str(node.content))
                 continue
             }
+            if (node.content === 'textbar') {
+                out.push(str('|')) // unified-latex-to-hast does not know it
+                continue
+            }
             if (LENGTH_REGISTERS.has(node.content) && !node.args?.length) {
                 i = skipDimension(nodes, i)
                 continue
@@ -326,6 +379,10 @@ function transformMacros(nodes, ctx, inTable = false) {
                 // TeX adds \vspace to \parskip: a negative one becomes a negative margin, which collapses
                 // with the paragraph margin into their sum; a positive one is a fixed gap (margins would max)
                 out.push(el('div', { class: 'lp-vspace', style: skip < 0 ? `margin-top:${skip}em` : `height:${skip}em` }))
+                continue
+            }
+            if (node.content === 'par' && !inTable) {
+                out.push(PARBREAK) // ends an \hfill row, like a blank line
                 continue
             }
             if (IGNORED.has(node.content)) continue
@@ -360,7 +417,12 @@ function transformMacros(nodes, ctx, inTable = false) {
             continue
         } else if (node.type === 'environment' || node.type === 'group') {
             const table = node.type === 'environment' ? TABLE_ENVS.has(envName(node)) : inTable
+            const ruled = table && node.content.some(n => n.type === 'macro' && TABLE_RULES.has(n.content))
             node.content = transformMacros(node.content, ctx, table)
+            if (node.type === 'environment' && table) {
+                out.push(el('div', { class: tableClass(node, ruled) }, [node]))
+                continue
+            }
             if (node.type === 'environment' && !STYLED_ENVS.has(envName(node)) && !KNOWN_TO_HAST.has(envName(node))) {
                 out.push(
                     el(
@@ -425,6 +487,7 @@ const LENGTH_REGISTERS = new Set([
     'itemindent',
     'listparindent',
     'parindent',
+    'parfillskip',
     'baselineskip',
     'tabcolsep',
     'arraycolsep',
@@ -473,6 +536,20 @@ function approximateEnvironment(content) {
 }
 
 const TABLE_ENVS = new Set(['tabular', 'tabular*', 'tabularx', 'array'])
+const TABLE_RULES = new Set(['hline', 'toprule', 'midrule', 'bottomrule'])
+
+// Wrapper classes the stylesheet lays a table out with: drawn rules, and @{} at either edge of the column spec.
+function tableClass(node, ruled) {
+    const spec = printRaw(node.args?.filter(a => a.openMark === '{').at(-1)?.content ?? []).replace(/\s+/g, '')
+    return [
+        'lp-tabular',
+        ruled ? 'lp-ruled' : '',
+        spec.startsWith('@{}') ? 'lp-flush-left' : '',
+        spec.endsWith('@{}') ? 'lp-flush-right' : '',
+    ]
+        .filter(Boolean)
+        .join(' ')
+}
 const KNOWN_TO_HAST = new Set(['itemize', 'enumerate', 'description', ...TABLE_ENVS, 'verbatim', 'document'])
 
 const MACRO_RENDERERS = {
@@ -537,9 +614,45 @@ function groupArgument(nodes, i) {
     return nodes[j]?.type === 'group' ? [nodes[j].content, j] : [null, i]
 }
 
-/** \begin{list}{label}{settings}: items with the given (or per-item [optional]) label, no indentation. */
+/** The \setlength{\name}{value} lengths of a list's {settings}, in em: { leftmargin: 1.3, ... }. */
+function listLengths(settings) {
+    const lengths = {}
+    for (const n of settings) {
+        if (n.type !== 'macro' || n.content !== 'setlength') continue
+        const [name, value] = (n.args ?? []).filter(a => a.openMark === '{')
+        const em = value ? lengthEm(printRaw(value.content)) : null
+        if (em !== null) lengths[printRaw(name.content).trim().replace(/^\\/, '')] = em
+    }
+    return lengths
+}
+
+/**
+ * Item and label boxes as LaTeX places them: the text indented by \leftmargin, the label right-aligned in a
+ * \labelwidth box that ends \labelsep before the text; \itemsep + \parsep between items, \topsep around.
+ * Lengths the list leaves alone keep the stylesheet's (no indentation, the label inline).
+ */
+function listStyles(lengths) {
+    const { leftmargin, labelsep = 0.5, itemsep, parsep = 0, topsep } = lengths
+    const hang = leftmargin > 0
+    const labelwidth = lengths.labelwidth ?? Math.max(0, (leftmargin ?? 0) - labelsep)
+    const style = parts => {
+        const text = parts.filter(Boolean).join(';')
+        return text ? { style: text } : {}
+    }
+    return {
+        list: style([topsep !== undefined && `margin:${topsep}em 0`]),
+        item: k => style([hang && `padding-left:${leftmargin}em`, itemsep !== undefined && `margin:${k > 0 ? itemsep + parsep : 0}em 0 0`]),
+        label: style([
+            hang &&
+                `display:inline-block;width:${labelwidth}em;margin-left:-${labelwidth + labelsep}em;margin-right:${labelsep}em;text-align:right;text-indent:0`,
+        ]),
+    }
+}
+
+/** \begin{list}{label}{settings}: items with the given (or per-item [optional]) label, laid out by its lengths. */
 function renderList(node, ctx) {
     const defaultLabel = node.args?.[0]?.content ?? []
+    const styles = listStyles(listLengths(node.args?.[1]?.content ?? []))
     const lead = []
     const items = []
     for (const child of node.content) {
@@ -553,15 +666,15 @@ function renderList(node, ctx) {
             lead.push(child)
         }
     }
-    return el('div', { class: 'lp-list' }, [
+    return el('div', { class: 'lp-list', ...styles.list }, [
         ...transformMacros(lead, ctx),
         // an empty \item[] (a class's list opener, cancelled in the PDF by \vspace) prints nothing visible
         ...items
             .filter(item => printRaw(item.label).trim() || item.body.some(isVisible))
-            .map(item =>
-                el('div', { class: 'lp-item' }, [
+            .map((item, k) =>
+                el('div', { class: 'lp-item', ...styles.item(k) }, [
                     ...(printRaw(item.label).trim()
-                        ? [el('span', { class: 'lp-label' }, transformMacros(structuredClone(item.label), ctx))]
+                        ? [el('span', { class: 'lp-label', ...styles.label }, transformMacros(structuredClone(item.label), ctx))]
                         : []),
                     ...transformMacros(item.body, ctx),
                 ]),
@@ -598,6 +711,34 @@ const isBlockNode = node =>
  * `left \hfill right \\`: a line with \hfill becomes a flex row whose fills push the parts apart, as in
  * the PDF (dates flush right); other \\ become <br>.
  */
+/**
+ * TeX adds \parskip where the next paragraph starts, not at the \par: `heading\par\smallskip\hrule` keeps
+ * the rule close to the heading. Each break moves past the vertical material after it (spacing, rules);
+ * with nothing after that, no paragraph starts and it adds nothing.
+ */
+function parskipBeforeNextParagraph(nodes) {
+    // spacing, rules and the (invisible) source anchors before them
+    const vertical = n => {
+        const element = htmlElement(n)
+        return element?.tag === 'hr' || ['lp-vspace', 'lp-a'].includes(String(element?.attributes?.class))
+    }
+    const out = []
+    let held = false
+    for (const n of nodes) {
+        if (n === PARBREAK) {
+            held = true
+            continue
+        }
+        if (held && n.type === 'whitespace') continue // spaces after \par are ignored (vertical mode)
+        if (held && !vertical(n)) {
+            out.push(PARBREAK)
+            held = false
+        }
+        out.push(n)
+    }
+    return out
+}
+
 function layoutLines(nodes) {
     // TeX adds one \parskip when a paragraph starts: a break with no text since the previous one adds
     // nothing, and spacing at the very start or end of a block (or \item) is dropped
@@ -616,6 +757,7 @@ function layoutLines(nodes) {
         textSinceBreak = false
         return keep
     })
+    nodes = parskipBeforeNextParagraph(nodes)
     if (!nodes.includes(FILL)) return nodes.map(n => (n === BREAK ? el('br', {}) : n === PARBREAK ? parSpacer() : n))
     const out = []
     let line = []
