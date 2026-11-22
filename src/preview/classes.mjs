@@ -2,6 +2,8 @@
 // the PDF page instead of as a generic web page.
 import { htmlLike } from '@unified-latex/unified-latex-util-html-like'
 import { printRaw } from '@unified-latex/unified-latex-util-print-raw'
+import { listNewcommands } from '@unified-latex/unified-latex-util-macros'
+import { simpleDefs } from './definitions.mjs'
 
 // sizes in PostScript points (bp), like the PDF
 const PAPER = {
@@ -47,11 +49,20 @@ function lengthBp(text) {
 
 /** Document class, its options and geometry settings, from the preamble (and local .cls files). */
 export function documentSetup(preambleNodeLists) {
-    const setup = { className: '', options: [], geometry: [] }
+    const setup = { className: '', options: [], geometry: [], parskip: null, urlColor: null }
     for (const nodes of preambleNodeLists) {
         nodes.forEach((node, i) => {
             if (node.type !== 'macro') return
-            if (node.content === 'documentclass') {
+            if (node.content === 'setlength') {
+                const [name, value] = (node.args ?? []).filter(a => a.openMark === '{').map(a => printRaw(a.content).trim())
+                if (name === '\\parskip') setup.parskip = value
+            } else if (node.content === 'hypersetup') {
+                // later \hypersetup calls (the document's, after its class) win
+                for (const option of printRaw(argumentOf(nodes, i) ?? []).split(',')) {
+                    const [key, value] = option.split('=').map(s => s.trim())
+                    if (key === 'urlcolor' && value) setup.urlColor = value
+                }
+            } else if (node.content === 'documentclass') {
                 setup.className = printRaw(argumentOf(nodes, i) ?? []).trim()
                 setup.options.push(...optionsOf(nodes, i).split(','))
             } else if (node.content === 'LoadClass') {
@@ -67,7 +78,7 @@ export function documentSetup(preambleNodeLists) {
     return setup
 }
 
-/** Page box in bp: { width, left, right, top, fontPt }. */
+/** Page box in bp: { width, left, right, top, fontPt }, plus parskip (bp) and urlColor when the preamble sets them. */
 export function pageLayout(setup) {
     const fontPt = setup.options.includes('12pt') ? 12 : setup.options.includes('11pt') ? 11 : 10
     const [width] = PAPER[setup.options.find(o => o in PAPER)] ?? PAPER.letterpaper
@@ -83,6 +94,10 @@ export function pageLayout(setup) {
         if (key === 'right' || key === 'rmargin' || key === 'outer') page.right = length
         if (key === 'top' || key === 'tmargin') page.top = length
     }
+    // a rubber length (2pt plus 1pt) keeps the stylesheet's default
+    const parskip = setup.parskip === null ? null : lengthBp(setup.parskip)
+    if (parskip !== null) page.parskip = parskip
+    if (setup.urlColor) page.urlColor = setup.urlColor
     return page
 }
 
@@ -106,9 +121,13 @@ export function classHeader(setup, preambleNodeLists) {
     }
     if (!name && addresses.length === 0) return null
     const [two, three, one] = addresses
+    // the class prints \addressSep ($\diamond$); a document redefining it gets its own (expanded as a user macro)
+    const ownSeparator = preambleNodeLists.some(nodes =>
+        [...listNewcommands({ type: 'root', content: nodes }), ...simpleDefs(nodes)].some(d => d.name === 'addressSep'),
+    )
     const separator = () => [
         { type: 'string', content: ' ' },
-        { type: 'inlinemath', content: [{ type: 'macro', content: 'diamond' }] },
+        ownSeparator ? { type: 'macro', content: 'addressSep' } : { type: 'inlinemath', content: [{ type: 'macro', content: 'diamond' }] },
         { type: 'string', content: ' ' },
     ]
     // inside \printaddress, \\ prints the separator instead of breaking the line

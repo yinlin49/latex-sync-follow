@@ -353,6 +353,97 @@ test('resume.cls prints \\name and \\address lines at the top', () => {
     assert.match(out, /^Jane DoeTitleCity\s*⋄?\s*Country/)
 })
 
+test('resume layout: nested two-argument macros, \\par ending an \\hfill row, TeX internals print nothing', () => {
+    const { m } = model({
+        'resume.cls': '\\def \\addressSep {$\\diamond$}',
+        'main.tex': String.raw`\documentclass{resume}
+\renewcommand{\addressSep}{\quad\textbar\quad}
+\newcommand{\cvrow}[2]{\begingroup\parfillskip=0pt\noindent #1\hfill\mbox{#2}\par\endgroup\nopagebreak}
+\newcommand{\cventry}[2]{\cvrow{\textbf{#1}}{#2}}
+\address{City \\ Phone}
+\begin{document}
+\fontsize{10.3}{12}\selectfont\ignorespaces
+
+\cvrow{Engineer}{2020 to 2025}
+GPA line
+
+\cventry{Software Engineer, Bank}{May 2025}
+\end{document}`,
+    })
+    const r = m.update(ROOT)
+    const out = html(r)
+    assert.doesNotMatch(text(r), /\\|10\.3|=0pt/)
+    assert.doesNotMatch(out, /lp-unsupported/)
+    // each argument lands in its own place: role left, dates right (\mbox), the next line after \par
+    assert.match(
+        out,
+        /<div class="lp-line"><span>\s*Engineer<\/span><span class="lp-fill"><\/span><span><span class="mbox">2020 to 2025<\/span><\/span><\/div>/,
+    )
+    assert.match(
+        out,
+        /<b class="textbf">Software Engineer, Bank<\/b><\/span><span class="lp-fill"><\/span><span><span class="mbox">May 2025</,
+    )
+    assert.match(text(r), /City\s*\|\s*Phone/) // the document's \renewcommand beats the class's \def
+    // click-to-source still reaches both arguments of \cvrow
+    const words = anchors(r).map(a => a[2])
+    assert.ok(words.includes('Engineer') && words.includes('2020'))
+})
+
+test('list lengths, a bare tabular, \\parskip and urlcolor are laid out as in the PDF', () => {
+    const { m } = model({
+        'main.tex': String.raw`\documentclass{article}
+\hypersetup{urlcolor=blue}
+\hypersetup{colorlinks=true,urlcolor=black}
+\setlength{\parskip}{2pt}
+\begin{document}
+\begin{list}{\textbullet}{\setlength{\leftmargin}{1.3em}\setlength{\labelwidth}{0.8em}\setlength{\labelsep}{0.5em}\setlength{\itemsep}{3pt}\setlength{\topsep}{3pt}}
+\item one
+\item two
+\end{list}
+\begin{tabular}{@{}ll@{}}
+a & b\\
+\end{tabular}
+\begin{tabular}{lr}\hline
+c & d\\
+\end{tabular}
+\end{document}`,
+    })
+    const r = m.update(ROOT)
+    const out = html(r)
+    assert.match(out, /<div class="lp-list" style="margin:0\.3em 0">/)
+    assert.match(out, /<div class="lp-item" style="padding-left:1\.3em;margin:0em 0 0">/)
+    assert.match(out, /<div class="lp-item" style="padding-left:1\.3em;margin:0\.3em 0 0">/)
+    assert.match(out, /class="lp-label" style="display:inline-block;width:0\.8em;margin-left:-1\.3em;margin-right:0\.5em;/)
+    assert.match(out, /<div class="lp-tabular lp-flush-left lp-flush-right"><table class="tabular/)
+    assert.match(out, /<div class="lp-tabular lp-ruled"><table class="tabular/)
+    assert.ok(Math.abs(r.page.parskip - 2 * (72 / 72.27)) < 1e-9)
+    assert.strictEqual(r.page.urlColor, 'black') // the later \hypersetup wins
+})
+
+test('\\parskip goes where the next paragraph starts, after the rule under a heading', () => {
+    const { m } = model({ 'main.tex': doc('\\noindent\\textbf{HEAD}\\par\\smallskip\\hrule\\vspace{5pt}\nBody text.') })
+    const out = html(m.update(ROOT))
+    assert.match(
+        out,
+        /HEAD<\/b>\s*<div class="lp-vspace"[^>]*><\/div>\s*<hr class="lp-hrule">\s*<div class="lp-vspace"[^>]*><\/div>\s*<div class="lp-par"><\/div>\s*Body/,
+    )
+})
+
+test('user macro arguments used as a URL or colour carry no source anchors', () => {
+    const { m } = model({
+        'main.tex': String.raw`\documentclass{article}
+\newcommand{\lnk}[2]{\href{#1}{#2}}
+\newcommand{\hue}[2]{\textcolor{#1}{#2}}
+\begin{document}
+\lnk{https://ex.com/a}{click here} \hue{red}{hi}
+\end{document}`,
+    })
+    const r = m.update(ROOT)
+    assert.match(rawHtml(r), /href="https:\/\/ex\.com\/a"/)
+    assert.doesNotMatch(rawHtml(r), /html-tag/)
+    assert.ok(anchors(r).some(a => a[2] === 'click'))
+})
+
 test('parseBib reads braces, quotes, bare values and nested braces', () => {
     const bib = parseBib('@book{k, title = {The {\\TeX}book}, year = 1984, note = "a {b} c"}\n@comment{x}\n@misc{m,author={X}}')
     assert.deepStrictEqual(bib.k, { title: 'The \\TeXbook', year: '1984', note: 'a b c' })

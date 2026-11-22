@@ -138,7 +138,7 @@ class LivePreview {
         return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${media('katex/katex.min.css')}"><link rel="stylesheet" href="${media('preview.css')}"></head>
-<body><div id="toolbar"><button id="export" title="Build the PDF with LaTeX (latexmk)">Export PDF</button><span class="spacer"></span>
+<body><div id="toolbar"><button id="export" title="Build the PDF with LaTeX (latexmk)">Export PDF</button><button id="hover-mode" class="secondary" title="What the pointer highlights: its source line or its word">Hover: Line</button><span class="spacer"></span>
 <button id="zoom-out" class="secondary" title="Zoom out">−</button><span id="zoom">100%</span><button id="zoom-in" class="secondary" title="Zoom in">+</button><button id="zoom-fit" class="secondary" title="Fit the page width">Fit</button></div>
 <div id="doc"></div><script nonce="${nonce}" src="${media('preview.js')}"></script></body></html>`
     }

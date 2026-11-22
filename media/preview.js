@@ -19,6 +19,9 @@
         const em = bp => `${bp / page.fontPt}em`
         doc.style.width = em(page.width)
         doc.style.padding = `${em(page.top)} ${em(page.right)} ${em(page.top)} ${em(page.left)}`
+        // \setlength{\parskip} and \hypersetup{urlcolor} of the preamble; absent: the stylesheet defaults
+        doc.style.setProperty('--lp-parskip', page.parskip === undefined ? '' : em(page.parskip))
+        doc.style.setProperty('--lp-url', page.urlColor ?? '')
         setZoom(state.zoom)
     }
 
@@ -44,6 +47,16 @@
         if (state.zoom === 'fit') setZoom('fit')
     })
     document.getElementById('export').onclick = () => vscode.postMessage({ type: 'export' })
+
+    // what the pointer highlights without a click: its source line ('line') or its word ('word')
+    const hoverButton = document.getElementById('hover-mode')
+    function setHoverMode(mode) {
+        state.hover = mode === 'word' ? 'word' : 'line'
+        hoverButton.textContent = state.hover === 'word' ? 'Hover: Word' : 'Hover: Line'
+        vscode.setState(state)
+    }
+    setHoverMode(state.hover)
+    hoverButton.onclick = () => setHoverMode(state.hover === 'word' ? 'line' : 'word')
     window.addEventListener(
         'wheel',
         e => {
@@ -122,7 +135,10 @@
             const target = anchorLine(block, anchors[first])
             const next = anchors.findIndex((a, i) => i > first && anchorLine(block, a) !== target)
             range.setStartBefore(anchors[first])
+            // the next line may start a new \item: stop before it, not after its label (the next bullet)
+            const item = next < 0 ? null : anchors[next].closest('.lp-item')
             if (next < 0) range.setEnd(block, block.childNodes.length)
+            else if (item && block.contains(item) && !item.contains(anchors[first])) range.setEndBefore(item)
             else range.setEndBefore(anchors[next])
             if (range.toString().trim() !== '' || next < 0) return range
             first = next
@@ -147,12 +163,7 @@
      * characters between that anchor and the caret the offset inside the word.
      */
     function sourcePosition(block, e) {
-        // KaTeX and images have no useful caret position: the element itself marks the spot
-        const atomic = e.target.closest('.lp-math-d, .lp-math-i, img')
-        const caret = atomic ? null : document.caretRangeFromPoint(e.clientX, e.clientY)
-        const node = atomic ?? caret?.startContainer ?? e.target
-        const offset = atomic ? 0 : (caret?.startOffset ?? 0)
-        const anchor = block.contains(node) ? anchorBefore(block, node, offset) : null
+        const { atomic, node, offset, anchor } = pointAt(block, e)
         if (!anchor) return { line: Number(block.dataset.line), column: 0 }
         let inWord = 0
         if (!atomic && node.nodeType === Node.TEXT_NODE) {
@@ -161,9 +172,73 @@
             between.setEnd(node, offset)
             inWord = between.toString().length
         }
-        const line = Math.min(anchorLine(block, anchor), Number(block.dataset.endLine))
-        return { line, column: Number(anchor.dataset.c) + inWord }
+        return { line: sourceLine(block, anchor), column: Number(anchor.dataset.c) + inWord }
     }
+
+    const sourceLine = (block, anchor) => Math.min(anchorLine(block, anchor), Number(block.dataset.endLine))
+
+    /** The DOM point under the pointer and the anchor before it, within `block`. */
+    function pointAt(block, e) {
+        // KaTeX and images have no useful caret position: the element itself marks the spot
+        const atomic = e.target.closest('.lp-math-d, .lp-math-i, img')
+        const caret = atomic ? null : document.caretRangeFromPoint(e.clientX, e.clientY)
+        const node = atomic ?? caret?.startContainer ?? e.target
+        const offset = atomic ? 0 : (caret?.startOffset ?? 0)
+        const anchor = block.contains(node) ? anchorBefore(block, node, offset) : null
+        return { atomic, node, offset, anchor }
+    }
+
+    /** The word an anchor marks: its formula or image, else its text up to the next space or anchor. */
+    function wordRange(block, anchor) {
+        const range = document.createRange()
+        const atom = anchor.nextSibling
+        if (atom?.nodeType === Node.ELEMENT_NODE && atom.matches('.lp-math-d, .lp-math-i, img')) {
+            range.selectNode(atom)
+            return range
+        }
+        range.setStartAfter(anchor)
+        const walker = document.createTreeWalker(block, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT)
+        walker.currentNode = anchor
+        let started = false
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (n.nodeType === Node.ELEMENT_NODE) {
+                if (n.classList.contains('lp-a')) break
+                continue
+            }
+            const from = started ? 0 : n.data.search(/\S/)
+            if (from < 0) continue
+            started = true
+            const space = n.data.slice(from).search(/\s/)
+            range.setEnd(n, space < 0 ? n.data.length : from + space)
+            if (space >= 0) break
+        }
+        return range
+    }
+
+    /** Highlight range for the pointer, or null over a margin or blank space (the caret snaps to text). */
+    function hoverRange(block, e) {
+        const { anchor } = pointAt(block, e)
+        if (!anchor) return null
+        const range = state.hover === 'word' ? wordRange(block, anchor) : lineRange(block, sourceLine(block, anchor))
+        const under = [...range.getClientRects()].some(
+            r => e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom,
+        )
+        return under ? range : null
+    }
+
+    let hoverFrame = 0
+    doc.addEventListener('mousemove', e => {
+        // one hit test per frame; none while a button is down (dragging a text selection)
+        if (!window.CSS?.highlights || hoverFrame || e.buttons) return
+        hoverFrame = requestAnimationFrame(() => {
+            hoverFrame = 0
+            const block = e.target.closest?.('.lp-block')
+            const range = block && hoverRange(block, e)
+            if (range) CSS.highlights.set('lp-hover', new Highlight(range))
+            else CSS.highlights.delete('lp-hover')
+        })
+    })
+    doc.addEventListener('mouseleave', () => window.CSS?.highlights?.delete('lp-hover'))
 
     function highlight(reveal, scroll) {
         const fileIndex = files.indexOf(reveal.file)
