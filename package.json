@@ -97,7 +97,7 @@
         "@unified-latex/unified-latex-util-macros": "^1.8.4",
         "@unified-latex/unified-latex-util-parse": "^1.8.4",
         "@unified-latex/unified-latex-util-print-raw": "^1.8.4",
-        "hast-util-to-html": "^9.0.6",
+        "hast-util-to-html": "^9.0.7",
         "katex": "^0.19.1",
         "unified": "^10.1.2"
     }
