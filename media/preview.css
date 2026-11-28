@@ -282,6 +282,14 @@ table.tabular {
 /* \tabcolsep = 6pt on each side of a column; @{} removes it at the table's edge */
 table.tabular td {
     padding: 0 0.6em;
+    vertical-align: top;
+}
+.lp-table-full > table.tabular {
+    width: 100%;
+}
+.lp-table-fit-first > table.tabular td:first-child {
+    width: 1%;
+    white-space: nowrap;
 }
 .lp-flush-left td:first-child {
     padding-left: 0;

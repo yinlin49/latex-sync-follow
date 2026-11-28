@@ -361,13 +361,17 @@ function transformMacros(nodes, ctx, inTable = false) {
         }
         if (node.type === 'macro') {
             // \& etc. as text: unified-latex-to-hast drops the space after a control symbol ("Backend &APIs");
-            // in tables the parser's & separator must stay a macro for the column split
-            if (ESCAPED.has(node.content) && !inTable) {
-                out.push(str(node.content))
+            // in tables, a bare string '&' would be split as a column separator, so wrap \& in a span
+            if (ESCAPED.has(node.content)) {
+                out.push(inTable && node.content === '&' ? el('span', {}, [str('&')]) : str(node.content))
                 continue
             }
             if (node.content === 'textbar') {
                 out.push(str('|')) // unified-latex-to-hast does not know it
+                continue
+            }
+            if (node.content === 'textbullet') {
+                out.push(str('•')) // solid bullet matching PDF rather than math bullet operator ∙
                 continue
             }
             if (LENGTH_REGISTERS.has(node.content) && !node.args?.length) {
@@ -417,10 +421,11 @@ function transformMacros(nodes, ctx, inTable = false) {
             continue
         } else if (node.type === 'environment' || node.type === 'group') {
             const table = node.type === 'environment' ? TABLE_ENVS.has(envName(node)) : inTable
+            const tableMeta = node.type === 'environment' && table ? normalizeTableEnv(node) : null
             const ruled = table && node.content.some(n => n.type === 'macro' && TABLE_RULES.has(n.content))
             node.content = transformMacros(node.content, ctx, table)
             if (node.type === 'environment' && table) {
-                out.push(el('div', { class: tableClass(node, ruled) }, [node]))
+                out.push(el('div', { class: tableClass(node, ruled, tableMeta) }, [node]))
                 continue
             }
             if (node.type === 'environment' && !STYLED_ENVS.has(envName(node)) && !KNOWN_TO_HAST.has(envName(node))) {
@@ -538,12 +543,40 @@ function approximateEnvironment(content) {
 const TABLE_ENVS = new Set(['tabular', 'tabular*', 'tabularx', 'array'])
 const TABLE_RULES = new Set(['hline', 'toprule', 'midrule', 'bottomrule'])
 
+// tabularx and tabular* take {width}{colspec} which unified-latex-util-parse leaves as leading groups
+// and unified-latex-to-hast only converts env === 'tabular' to <table>.
+function normalizeTableEnv(node) {
+    const name = envName(node)
+    if (name !== 'tabularx' && name !== 'tabular*') return null
+    const groups = []
+    let cut = 0
+    for (let i = 0; i < node.content.length && groups.length < 2; i++) {
+        const n = node.content[i]
+        if (n.type === 'group') {
+            groups.push(n)
+            cut = i + 1
+        } else if (n.type !== 'whitespace' && n.type !== 'comment' && htmlElement(n)?.attributes?.class !== 'lp-a') {
+            break
+        }
+    }
+    if (groups.length === 2) {
+        node.content = node.content.slice(cut)
+        const colspec = groups[1].content.filter(n => htmlElement(n)?.attributes?.class !== 'lp-a')
+        node.args = [{ type: 'argument', openMark: '{', closeMark: '}', content: colspec }]
+    }
+    node.env = 'tabular'
+    return { fullWidth: true }
+}
+
 // Wrapper classes the stylesheet lays a table out with: drawn rules, and @{} at either edge of the column spec.
-function tableClass(node, ruled) {
+function tableClass(node, ruled, meta = null) {
     const spec = printRaw(node.args?.filter(a => a.openMark === '{').at(-1)?.content ?? []).replace(/\s+/g, '')
+    const cleanSpec = spec.replace(/@\{[^}]*\}/g, '')
     return [
         'lp-tabular',
         ruled ? 'lp-ruled' : '',
+        meta?.fullWidth ? 'lp-table-full' : '',
+        meta?.fullWidth && /^[lrc]X/.test(cleanSpec) ? 'lp-table-fit-first' : '',
         spec.startsWith('@{}') ? 'lp-flush-left' : '',
         spec.endsWith('@{}') ? 'lp-flush-right' : '',
     ]

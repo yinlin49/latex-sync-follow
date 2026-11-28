@@ -81,7 +81,8 @@ export function documentSetup(preambleNodeLists) {
 /** Page box in bp: { width, left, right, top, fontPt }, plus parskip (bp) and urlColor when the preamble sets them. */
 export function pageLayout(setup) {
     const fontPt = setup.options.includes('12pt') ? 12 : setup.options.includes('11pt') ? 11 : 10
-    const [width] = PAPER[setup.options.find(o => o in PAPER)] ?? PAPER.letterpaper
+    const paperOpt = setup.geometry.find(o => o.trim() in PAPER)?.trim() ?? setup.options.find(o => o in PAPER)
+    const [width] = PAPER[paperOpt] ?? PAPER.letterpaper
     const side = (width - TEXT_WIDTH_PT[fontPt] * UNIT_BP.pt) / 2
     const page = { width, left: side, right: side, top: 72 + 30, fontPt }
     for (const option of setup.geometry) {
