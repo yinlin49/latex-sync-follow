@@ -444,6 +444,25 @@ test('user macro arguments used as a URL or colour carry no source anchors', () 
     assert.ok(anchors(r).some(a => a[2] === 'click'))
 })
 
+test('tabularx renders as a full-width table, keeps \\& spaced, and geometry a4paper sets width', () => {
+    const { m } = model({
+        'resume.cls': '\\LoadClass[5pt,letterpaper]{article}',
+        'main.tex': String.raw`\documentclass{resume}
+\usepackage[a4paper,left=0.7in,right=0.7in]{geometry}
+\begin{document}
+\noindent\begin{tabularx}{\linewidth}{@{}lX@{}}
+\textbf{Course:} & Statistics \& Random Processes\\
+\end{tabularx}
+\end{document}`,
+    })
+    const r = m.update(ROOT)
+    const out = html(r)
+    assert.match(out, /<div class="lp-tabular lp-table-full lp-table-fit-first lp-flush-left lp-flush-right"><table class="tabular">/)
+    assert.match(out, /<td><b class="textbf">Course:<\/b> <\/td><td> Statistics <span>&#x26;<\/span> Random Processes<\/td>/)
+    assert.doesNotMatch(out, /@lX@|linewidth/)
+    assert.strictEqual(r.page.width, 595.3)
+})
+
 test('parseBib reads braces, quotes, bare values and nested braces', () => {
     const bib = parseBib('@book{k, title = {The {\\TeX}book}, year = 1984, note = "a {b} c"}\n@comment{x}\n@misc{m,author={X}}')
     assert.deepStrictEqual(bib.k, { title: 'The \\TeXbook', year: '1984', note: 'a b c' })
