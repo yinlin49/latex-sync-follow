@@ -1,16 +1,22 @@
-# Pushing a vX.Y.Z (or vX.Y.Z-pre.N) tag that matches package.json releases that commit: the full CI runs
-# first (it is called below), and only the .vsix that CI built and tested is attached to the GitHub Release.
+# Two ways to release; either way the full CI runs first (it is called below), and only the .vsix that CI
+# built and tested is attached to the GitHub Release.
+# - Push (merge main) to the `release` branch: the next version is tagged automatically. That is package.json's
+#   version if it has no tag yet (raised on main for a minor or major release), else the next patch after the
+#   highest vX.Y.* tag. The version bump is committed on the tag only, so `release` keeps main's package.json
+#   and merging main into it never conflicts.
+# - Push a vX.Y.Z (or vX.Y.Z-pre.N) tag that matches package.json: that commit is released.
 name: Release
 
 on:
     push:
+        branches: [release]
         tags: ['v*.*.*']
 
 permissions:
     contents: read
 
 concurrency:
-    # one release per tag at a time; never cancel a release half way
+    # one release per ref at a time, queued; never cancel a release half way
     group: release-${{ github.ref }}
     cancel-in-progress: false
 
@@ -19,20 +25,55 @@ jobs:
         name: Check tag and version
         runs-on: ubuntu-latest
         timeout-minutes: 5
+        permissions:
+            contents: write # a push to the release branch creates the tag
         outputs:
+            tag: ${{ steps.info.outputs.tag }}
             version: ${{ steps.info.outputs.version }}
             prerelease: ${{ steps.info.outputs.prerelease }}
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  persist-credentials: false
+                  # the branch tip, not the pushed commit: a queued run must see the tag of the run before it
+                  ref: ${{ github.ref }}
+                  fetch-depth: 0
+                  persist-credentials: ${{ github.ref_type == 'branch' }}
+            - name: Tag the next version
+              if: github.ref_type == 'branch'
+              run: |
+                  current=$(node -p 'require("./package.json").version')
+                  if [[ ! $current =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+                    echo "::error::package.json version $current is not X.Y.Z; tag prereleases by hand"
+                    exit 1
+                  fi
+                  line="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+                  version=$current
+                  if git rev-parse -q --verify "refs/tags/v$current" > /dev/null; then
+                    last=$(git tag -l "v$line.*" | sed -nE "s/^v${BASH_REMATCH[1]}\.${BASH_REMATCH[2]}\.([0-9]+)$/\1/p" | sort -n | tail -1)
+                    version="$line.$((last + 1))"
+                  fi
+                  if [ "$version" != "$current" ]; then
+                    npm version "$version" --no-git-tag-version --ignore-scripts
+                    git config user.name 'github-actions[bot]'
+                    git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+                    git commit -am "chore: release v$version"
+                  fi
+                  git tag "v$version"
+                  # pushed with GITHUB_TOKEN, so the tag does not start this workflow a second time
+                  git push origin "refs/tags/v$version"
+                  echo "TAG=v$version" >> "$GITHUB_ENV"
             - id: info
-              run: node scripts/release-info.mjs "$GITHUB_REF_NAME"
+              run: |
+                  tag=${TAG:-$GITHUB_REF_NAME}
+                  node scripts/release-info.mjs "$tag"
+                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
     ci:
         name: CI
         needs: tag
         uses: ./.github/workflows/ci.yml
+        with:
+            ref: refs/tags/${{ needs.tag.outputs.tag }}
 
     github-release:
         name: GitHub Release
@@ -43,12 +84,13 @@ jobs:
             contents: write
         env:
             GH_TOKEN: ${{ github.token }}
-            TAG: ${{ github.ref_name }}
+            TAG: ${{ needs.tag.outputs.tag }}
             VERSION: ${{ needs.tag.outputs.version }}
             PRERELEASE: ${{ needs.tag.outputs.prerelease }}
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
+                  ref: refs/tags/${{ needs.tag.outputs.tag }}
                   persist-credentials: false
             # the package the CI jobs of this run built and tested
             - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
