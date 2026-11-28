@@ -97,19 +97,23 @@ Options:
     - Lint, formatting, type check, unit tests, build, package and package verification run on Linux, Windows and macOS.
     - Runtime dependencies are audited.
     - The end-to-end suite runs on Linux against the packaged `.vsix`.
-- **[Release](.github/workflows/release.yml)** runs when a `vX.Y.Z` tag is pushed.
-    1. It checks that the tag matches `package.json`.
-    2. It runs the whole CI.
+- **[Release](.github/workflows/release.yml)** runs on a push to the `release` branch or of a `vX.Y.Z` tag.
+    1. It picks the tag: on `release`, the next version (see below); for a pushed tag, it checks that the tag matches `package.json`.
+    2. It runs the whole CI on that tag.
     3. It creates a GitHub Release with the tested `.vsix` and its `.sha256`.
     - The notes are the matching `CHANGELOG.md` section plus the commit list.
     - Tags like `v1.2.0-beta.1` become prereleases.
     - An existing release is never replaced.
 
-To release a new version:
+To release a new version, merge `main` into `release` and push it:
 
-1. Move the `## [Unreleased]` notes in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` heading and commit them.
-2. Run `npm version patch` (or `minor`, `major`, `prerelease --preid=beta`). It updates `package.json` and creates the commit and the `vX.Y.Z` tag.
-3. Run `git push --follow-tags`. The release appears under Releases when CI passes.
+```sh
+git switch release && git merge main && git push
+```
+
+The workflow tags the next patch version (`0.2.0` → `0.2.1` → `0.2.2` …) and releases it. The version bump is committed on the tag only, so `release` and `main` keep the same `package.json` and the merge never conflicts. For a minor or major release, run `npm version minor --no-git-tag-version` (or `major`) on `main` first; that version is released as is. Optionally, move the `## [Unreleased]` notes in `CHANGELOG.md` under a `## [X.Y.Z] - YYYY-MM-DD` heading before merging, for the release notes.
+
+Prereleases are still tagged by hand: `npm version prerelease --preid=beta`, then `git push --follow-tags`.
 
 ### Publishing to the Visual Studio Marketplace and Open VSX (optional)
 
